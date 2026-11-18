@@ -35,5 +35,8 @@ When a drawer side's height plus machining width allowance exceeds usable purcha
 ## Whole-board estimates (v1.7)
 The calculator now accepts nominal purchased board length in feet (default 8). It builds a cut list for every drawer front/back and two sides, adds total end-snipe allowance once per physical part, splits oversized drawer heights into edge-glued strips, and uses a deterministic free-rectangle packing heuristic across finite stock lengths and widths. The displayed count is whole purchased boards; purchased BF and cost derive from that count, stock width, thickness, length, and price. The optional safety percentage rounds up to whole boards and remains zero by default. This is a heuristic and should not be represented as an exact optimal cutting plan. JSON project settings merge with defaults, so previous projects without boardLength default to 8 feet. The storage key stays unchanged.
 
+## Drawer previews (v1.8)
+The app renders an isometric-style SVG preview card for each drawer record at the bottom of the page. Previews show the open-top structural drawer box, scaled proportionally from outside width, depth and group height, and show the record's label and quantity. They update live on dimension or label edits. No new saved schema fields are required. Future iterations may show dovetail geometry, applied fronts or alternate views if requested.
+
 ## Calculation caution
 The first implementations estimate strip yield per height group and use a simplified average length calculation; they do not optimize crosscuts on finite 8–10 foot purchased boards. Check the per-part extra-length convention carefully before relying on purchasing totals. Consider a unit-tested cut optimizer as a future improvement.
