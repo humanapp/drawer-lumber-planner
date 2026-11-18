@@ -32,5 +32,8 @@ This is a compact, browser-based lumber estimator developed alongside a custom k
 ## Edge-glued tall parts (v1.6)
 When a drawer side's height plus machining width allowance exceeds usable purchased board width, estimate an edge-glued panel assembled from the minimum number of strips. For example, an 11-inch-high side from 8-inch stock uses two strips. This is conservative because offcuts from the narrower component are not credited against other drawer parts. The total extra length per individual cut part is applied once (e.g., 6 inches combined for both ends), not twice.
 
+## Whole-board estimates (v1.7)
+The calculator now accepts nominal purchased board length in feet (default 8). It builds a cut list for every drawer front/back and two sides, adds total end-snipe allowance once per physical part, splits oversized drawer heights into edge-glued strips, and uses a deterministic free-rectangle packing heuristic across finite stock lengths and widths. The displayed count is whole purchased boards; purchased BF and cost derive from that count, stock width, thickness, length, and price. The optional safety percentage rounds up to whole boards and remains zero by default. This is a heuristic and should not be represented as an exact optimal cutting plan. JSON project settings merge with defaults, so previous projects without boardLength default to 8 feet. The storage key stays unchanged.
+
 ## Calculation caution
 The first implementations estimate strip yield per height group and use a simplified average length calculation; they do not optimize crosscuts on finite 8–10 foot purchased boards. Check the per-part extra-length convention carefully before relying on purchasing totals. Consider a unit-tested cut optimizer as a future improvement.
