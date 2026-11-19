@@ -125,69 +125,78 @@ function svgNode(tag,attrs,content){
 function renderPreviews(){
  const host=$('previews');host.replaceChildren();
  let count=0;
- for(const g of state.groups){
-  for(const item of g.items){
-   const w=num(item.width),d=num(item.depth),h=num(g.height),qty=Math.floor(num(item.qty));
-   if(!w||!d||!h||qty<=0)continue;
-   count++;
-   const card=document.createElement('div');card.className='preview-card';
-   const heading=document.createElement('strong');heading.textContent=item.label?.trim()||'Drawer '+count;
-   const subtitle=document.createElement('small');subtitle.className='muted';
-   subtitle.textContent=w+'" W × '+d+'" D × '+h+'" H · Qty '+qty;
-   const svg=svgNode('svg',{viewBox:'0 0 255 160',role:'img','aria-label':'Open-top isometric drawer box '+w+' inches wide, '+d+' inches deep, '+h+' inches tall'});
-   // The same scale applies to all three dimensions within each view.
-   // Oblique isometric-style projection: horizontal width, receding depth and height.
+ for(const g of state.groups)for(const item of g.items){
+  const w=num(item.width),d=num(item.depth),h=num(g.height),qty=Math.floor(num(item.qty));
+  if(!w||!d||!h||qty<=0)continue;
+  count++;
+  const vertical=item.vertical===true;
+  const card=document.createElement('div');card.className='preview-card';
+  const heading=document.createElement('strong');heading.textContent=item.label?.trim()||'Drawer '+count;
+  const subtitle=document.createElement('small');subtitle.className='muted';
+  subtitle.textContent=w+'" W × '+d+'" D × '+h+'" H · Qty '+qty+(vertical?' · Vertical':'');
+  const svg=svgNode('svg',{viewBox:'0 0 255 160',role:'img','aria-label':(vertical?'Vertical front-and-back panels':'Open-top drawer box')+' '+w+' inches wide, '+d+' inches deep, '+h+' inches tall'});
+  const line={stroke:'#745b41','stroke-width':1.4,'stroke-linejoin':'round'};
+  const poly=pts=>pts.map(p=>p.map(n=>n.toFixed(2)).join(',')).join(' ');
+  const usableWidth=num(state.settings.stockWidth)-num(state.settings.edgeTrim);
+  const seamStyle={stroke:'#765b3b','stroke-width':0.85,'stroke-opacity':0.42,'stroke-linecap':'round'};
+  if(vertical){
+   // Two tall upright panels, front and back, separated by the entered depth.
+   // Their glue-up strips run vertically, matching the grain/board lengths.
+   const scale=Math.min(170/(w+0.43*d),120/h);
+   const W=w*scale,D=d*scale,H=h*scale;
+   const x=(255-W-0.43*D)/2,y=(160-H+0.25*D)/2;
+   const A=[x,y],B=[x+W,y],C=[x+W+0.43*D,y-0.25*D],E=[x+0.43*D,y-0.25*D];
+   const down=p=>[p[0],p[1]+H];
+   svg.append(svgNode('polygon',{points:poly([E,C,down(C),down(E)]),fill:'#b79b75',...line}));
+   svg.append(svgNode('polygon',{points:poly([A,B,down(B),down(A)]),fill:'#d9b58a',...line}));
+   const strips=usableWidth>0?Math.max(1,Math.ceil((w+num(state.settings.widthExtra))/usableWidth)):1;
+   for(let j=1;j<strips;j++){
+    const fraction=j/strips;
+    const frontX=A[0]+W*fraction,rearX=E[0]+W*fraction;
+    svg.append(svgNode('line',{x1:frontX,y1:A[1],x2:frontX,y2:A[1]+H,...seamStyle}));
+    svg.append(svgNode('line',{x1:rearX,y1:E[1],x2:rearX,y2:E[1]+H,...seamStyle}));
+   }
+  }else{
    const scale=Math.min(190/(w+0.55*d),105/(h+0.32*d));
    const W=w*scale,D=d*scale,H=h*scale;
    const x0=(255-W-0.52*D)/2,y0=(160+H+0.29*D)/2-H;
    const A=[x0,y0],B=[x0+W,y0],C=[x0+W+0.52*D,y0-0.29*D],E=[x0+0.52*D,y0-0.29*D];
    const lower=p=>[p[0],p[1]+H];
-   const poly=pts=>pts.map(p=>p.map(n=>n.toFixed(2)).join(',')).join(' ');
-   const line={stroke:'#745b41','stroke-width':1.4,'stroke-linejoin':'round'};
-   // The rear interior wall and floor remain visible through the open top.
    svg.append(svgNode('polygon',{points:poly([E,C,lower(C),lower(E)]),fill:'#b79b75',...line}));
    svg.append(svgNode('polygon',{points:poly([lower(A),lower(B),lower(C),lower(E)]),fill:'#e7d4b7',stroke:'#927552','stroke-width':1}));
    svg.append(svgNode('polygon',{points:poly([B,C,lower(C),lower(B)]),fill:'#bc996b',...line}));
    svg.append(svgNode('polygon',{points:poly([A,B,lower(B),lower(A)]),fill:'#d9b58a',...line}));
    svg.append(svgNode('polyline',{points:poly([A,E,C,B]),fill:'none',stroke:'#745b41','stroke-width':2,'stroke-linejoin':'round'}));
    svg.append(svgNode('line',{x1:A[0],y1:A[1],x2:A[0],y2:A[1]+H,stroke:'#745b41','stroke-width':1.5}));
-   // Show faint glue-up joints wherever the panel needs more than one stock-width strip.
-   const usableWidth=num(state.settings.stockWidth)-num(state.settings.edgeTrim);
-   const roughHeight=h+num(state.settings.widthExtra);
-   const stripCount=usableWidth>0?Math.ceil(roughHeight/usableWidth):1;
-   if(stripCount>1){
-    for(let j=1;j<stripCount;j++){
-     const offset=H*j/stripCount;
-     const seamStyle={stroke:'#765b3b','stroke-width':0.85,'stroke-opacity':0.42,'stroke-linecap':'round'};
-     // Back, right side, and front are separate edge-glued panels.
-     for(const [p,q] of [[E,C],[B,C],[A,B]]){
-      svg.append(svgNode('line',{x1:p[0],y1:p[1]+offset,x2:q[0],y2:q[1]+offset,...seamStyle}));
-     }
+   const strips=usableWidth>0?Math.max(1,Math.ceil((h+num(state.settings.widthExtra))/usableWidth)):1;
+   for(let j=1;j<strips;j++){
+    const offset=H*j/strips;
+    for(const [p,q] of [[E,C],[B,C],[A,B]]){
+     svg.append(svgNode('line',{x1:p[0],y1:p[1]+offset,x2:q[0],y2:q[1]+offset,...seamStyle}));
     }
    }
-   // Indicate the inner opening and rim without pretending to model joinery.
    const inset=Math.max(2,Math.min(5,0.45*scale));
-   const inner=[ [A[0]+inset,A[1]-inset*.35],[B[0]-inset,B[1]-inset*.35],[C[0]-inset*1.4,C[1]+inset*.6],[E[0]+inset*1.4,E[1]+inset*.6] ];
+   const inner=[[A[0]+inset,A[1]-inset*.35],[B[0]-inset,B[1]-inset*.35],[C[0]-inset*1.4,C[1]+inset*.6],[E[0]+inset*1.4,E[1]+inset*.6]];
    svg.append(svgNode('polyline',{points:poly([...inner,inner[0]]),fill:'none',stroke:'#f7e6c9','stroke-width':1.5,'stroke-linejoin':'round'}));
-   card.append(heading,subtitle,svg);host.append(card);
   }
+  card.append(heading,subtitle,svg);host.append(card);
  }
  if(!count){const p=document.createElement('p');p.className='note';p.textContent='Add drawers with positive dimensions to see their previews.';host.append(p)}
 }
-
 
 function crosscutRows(){
  const s=state.settings,usable=num(s.stockWidth)-num(s.edgeTrim),extra=num(s.endExtra),wide=num(s.widthExtra),groups=new Map();
  if(usable<=0)return {rows:[],total:0};
  for(const g of state.groups){
-  const h=num(g.height),required=h+wide;
-  if(h<=0||required<=0)continue;
-  const strips=Math.max(1,Math.ceil(required/usable));
+  const h=num(g.height);
+  if(h<=0)continue;
   for(const item of g.items){
    const qty=Math.floor(num(item.qty)),w=num(item.width),d=num(item.depth);
    if(qty<=0||w<=0||d<=0)continue;
    const label=(item.label||'').trim()||'Unlabeled';
-   for(const [part,length] of [['front/back',w+extra],['sides',d+extra]]){
+   const vertical=item.vertical===true,roughWidth=(vertical?w:h)+wide;
+   const strips=Math.max(1,Math.ceil(roughWidth/usable));
+   for(const [part,length] of (vertical?[['upright front/back',h+extra]]:[['front/back',w+extra],['sides',d+extra]])){
     // Crosscut full-width blanks first. Rip strips later, after acclimation.
     const count=2*qty*strips,key=length.toFixed(4);
     if(!groups.has(key))groups.set(key,{length,count:0,uses:[]});
