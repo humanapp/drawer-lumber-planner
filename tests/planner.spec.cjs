@@ -102,12 +102,13 @@ test('legacy saved project retains its old price and drawer labels', async ({ pa
 test('vertical drawer shows two upright panels, vertical seams, and no side crosscuts', async ({ page }) => {
   const project = structuredClone(sampleProject);
   project.settings.lumberProfile = 's2s4';
-  project.groups[0].height = 24;
-  project.groups[0].items[0] = { id: 2, label: 'Trash cubby', qty: 1, width: 12, depth: 10, vertical: true };
+  project.groups[0].height = 12;
+  project.groups[0].items[0] = { id: 2, label: 'Trash cubby', qty: 1, width: 24, depth: 0, vertical: true };
   await page.addInitScript(({ key, project }) => localStorage.setItem(key, JSON.stringify(project)), { key, project });
   await page.goto('/');
   const card = page.locator('#previews .preview-card');
   await expect(page.getByLabel('Vertical drawer: Trash cubby')).toBeChecked();
+  await expect(card).toContainText('24\" upright height');
   await expect(card).toContainText('Vertical');
   await expect(card.locator('svg polygon')).toHaveCount(2);
   const seams = await card.locator('svg line').evaluateAll(els =>
@@ -126,6 +127,12 @@ test('vertical drawer shows two upright panels, vertical seams, and no side cros
   const qty = Number(await page.locator('#cutListFoot .numeric').innerText());
   expect(qty).toBe(4);
   await expect(page.locator('[data-itemid="2"]')).toHaveText('4.0');
+  const costBefore = await page.locator('#cost').innerText();
+  const countBefore = await page.locator('#cutListFoot .numeric').innerText();
+  await page.getByLabel('Depth').fill('38');
+  await expect(page.locator('#cost')).toHaveText(costBefore);
+  await expect(page.locator('#cutListFoot .numeric')).toHaveText(countBefore);
+  await expect(card).toContainText('24\" upright height');
   await page.reload();
   await expect(page.getByLabel('Vertical drawer: Trash cubby')).toBeChecked();
 });
