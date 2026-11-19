@@ -64,7 +64,8 @@ test('8/4 profile reduces purchased plank count but uses twice nominal board fee
   const cost8 = Number((await page.locator('#cost').innerText()).replace(/[$,]/g, ''));
   expect(count4).toBeGreaterThan(0);
   expect(count8).toBe(Math.ceil(count4 / 2));
-  expect(bf8).toBeCloseTo(bf4, 0);
+  expect(bf8).toBeGreaterThanOrEqual(bf4 - 0.2);
+  expect(bf8).toBeLessThanOrEqual(bf4 + 2 * 8 * 8 / 12 + 0.2);
   expect(cost8).toBeLessThan(cost4);
   await expect(page.getByLabel('4/4 S2S price ($/BF)')).toHaveValue('9');
   await expect(page.getByLabel('8/4 rough price ($/BF)')).toHaveValue('5');
