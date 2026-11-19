@@ -153,3 +153,24 @@ test('vertical checkbox updates cut counts and remains checked after JSON round 
   await page.reload();
   await expect(page.getByLabel('Vertical drawer: Upper-left')).toBeChecked();
 });
+
+test('6/4 SAB profile uses nominal 1.5-inch purchase thickness, one layer and its own price', async ({ page }) => {
+  const project = structuredClone(sampleProject);
+  project.settings.lumberProfile = 's2s4';
+  project.settings.price6 = 4.25;
+  await page.addInitScript(({ key, project }) => {
+    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(project));
+  }, {key, project});
+  await page.goto('/');
+  const boards4 = Number(await page.locator('#boards').innerText());
+  const bf4 = Number(await page.locator('#purchase').innerText());
+  const cuts4 = await page.locator('#cutListFoot .numeric').innerText();
+  await page.getByLabel('Purchased lumber profile').selectOption('sab6');
+  await expect(page.getByLabel('6/4 SAB price ($/BF)')).toHaveValue('4.25');
+  expect(Number(await page.locator('#boards').innerText())).toBe(boards4);
+  expect(Number(await page.locator('#purchase').innerText())).toBeCloseTo(bf4*1.5, 0);
+  await expect(page.locator('#cutListFoot .numeric')).toHaveText(cuts4);
+  await page.reload();
+  await expect(page.getByLabel('Purchased lumber profile')).toHaveValue('sab6');
+  await expect(page.getByLabel('6/4 SAB price ($/BF)')).toHaveValue('4.25');
+});
