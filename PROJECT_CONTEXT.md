@@ -56,5 +56,8 @@ Each drawer row has a Vertical checkbox (default false, remains backward compati
 ## Vertical drawer dimensions (v2.7)
 For vertical drawers, the row Width is the upright panel height (the crosscut dimension, plus end/snipe allowance). The height-group dimension is the horizontal panel width (and determines the number of edge-glued vertical strips, if needed). Depth is used only to visually separate the two upright front/back surfaces in the SVG preview; it does not contribute to material volume, cut quantity, costs or length. Depth is still editable and saved. Regular drawers use the original dimensions unchanged.
 
+## 6/4 SAB profile (v2.8)
+Added a third purchased-lumber profile, `sab6`, named 6/4 SAB hard maple, one usable milled layer per plank, nominal purchased thickness of 1.5 inches, and its own independently saved `price6` ($/BF). Shares board width, length, milling allowances and drawer specifications with 4/4 and 8/4 modes. Purchase board footage is 1.5x a same-number-of-boards 4/4 purchase; crosscut blank counts stay at one-layer quantities. The app must not assume 6/4 yields two 5/8-inch finished layers. Existing localStorage and project JSON remain compatible.
+
 ## Calculation caution
 The first implementations estimate strip yield per height group and use a simplified average length calculation; they do not optimize crosscuts on finite 8–10 foot purchased boards. Check the per-part extra-length convention carefully before relying on purchasing totals. Consider a unit-tested cut optimizer as a future improvement.
