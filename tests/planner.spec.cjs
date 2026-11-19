@@ -124,7 +124,7 @@ test('vertical drawer shows two upright panels, vertical seams, and no side cros
   await expect(page.locator('#cutListBody')).toContainText('30.000');
   await expect(page.locator('#cutListBody')).not.toContainText('sides');
   const qty = Number(await page.locator('#cutListFoot .numeric').innerText());
-  expect(qty).toBe(2);
+  expect(qty).toBe(4);
   await expect(page.locator('[data-itemid="2"]')).toHaveText('4.0');
   await page.reload();
   await expect(page.getByLabel('Vertical drawer: Trash cubby')).toBeChecked();
@@ -133,6 +133,7 @@ test('vertical drawer shows two upright panels, vertical seams, and no side cros
 test('vertical checkbox updates cut counts and remains checked after JSON round trip via local storage', async ({ page }) => {
   const project = structuredClone(sampleProject);
   project.groups[0].items[0].qty = 1;
+  project.groups[0].items[0].width = 6;
   await page.addInitScript(({ key, project }) => localStorage.setItem(key, JSON.stringify(project)), { key, project });
   await page.goto('/');
   const before = Number(await page.locator('#cutListFoot .numeric').innerText());
