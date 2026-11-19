@@ -101,6 +101,7 @@ test('legacy saved project retains its old price and drawer labels', async ({ pa
 
 test('vertical drawer shows two upright panels, vertical seams, and no side crosscuts', async ({ page }) => {
   const project = structuredClone(sampleProject);
+  project.settings.lumberProfile = 's2s4';
   project.groups[0].height = 24;
   project.groups[0].items[0] = { id: 2, label: 'Trash cubby', qty: 1, width: 12, depth: 10, vertical: true };
   await page.addInitScript(({ key, project }) => localStorage.setItem(key, JSON.stringify(project)), { key, project });
