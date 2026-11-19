@@ -129,7 +129,10 @@ test('vertical drawer shows two upright panels, vertical seams, and no side cros
   await expect(page.locator('[data-itemid="2"]')).toHaveText('4.0');
   const costBefore = await page.locator('#cost').innerText();
   const countBefore = await page.locator('#cutListFoot .numeric').innerText();
+  const rearBefore = await card.locator('svg polygon').first().getAttribute('points');
   await page.getByLabel('Depth').fill('38');
+  const rearAfter = await card.locator('svg polygon').first().getAttribute('points');
+  expect(rearAfter).not.toBe(rearBefore);
   await expect(page.locator('#cost')).toHaveText(costBefore);
   await expect(page.locator('#cutListFoot .numeric')).toHaveText(countBefore);
   await expect(card).toContainText('24\" upright height');
