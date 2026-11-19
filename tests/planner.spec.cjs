@@ -17,7 +17,7 @@ const sampleProject = {
 
 test('initial load renders saved drawers and all milling assumptions', async ({ page }) => {
   await page.addInitScript(({ key, project }) => {
-    localStorage.setItem(key, JSON.stringify(project));
+    localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project));
   }, { key, project: sampleProject });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Drawer Lumber Planner/ })).toBeVisible();
@@ -52,7 +52,7 @@ test('profile selection, assumptions and drawer edits survive reload', async ({ 
 
 test('8/4 profile reduces purchased plank count but uses twice nominal board feet per plank', async ({ page }) => {
   await page.addInitScript(({ key, project }) => {
-    localStorage.setItem(key, JSON.stringify(project));
+    localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project));
   }, { key, project: { ...sampleProject, settings: { ...sampleProject.settings, lumberProfile: 's2s4' } } });
   await page.goto('/');
   const count4 = Number(await page.locator('#boards').innerText());
@@ -73,7 +73,7 @@ test('8/4 profile reduces purchased plank count but uses twice nominal board fee
 
 test('initial crosscut list accounts for two resawn layers per 8/4 blank', async ({ page }) => {
   await page.addInitScript(({ key, project }) => {
-    localStorage.setItem(key, JSON.stringify(project));
+    localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project));
   }, { key, project: { ...sampleProject, settings: { ...sampleProject.settings, lumberProfile: 's2s4' } } });
   await page.goto('/');
   const rows4 = await page.locator('#cutListBody tr').allTextContents();
@@ -91,7 +91,7 @@ test('legacy saved project retains its old price and drawer labels', async ({ pa
   delete legacy.settings.price8;
   delete legacy.settings.lumberProfile;
   delete legacy.settings._profilePricesInitialized;
-  await page.addInitScript(({ key, project }) => localStorage.setItem(key, JSON.stringify(project)),
+  await page.addInitScript(({ key, project }) => localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project)),
     { key, project: legacy });
   await page.goto('/');
   await expect(page.getByLabel('Purchased lumber profile')).toHaveValue('s2s4');
@@ -104,7 +104,7 @@ test('vertical drawer shows two upright panels, vertical seams, and no side cros
   project.settings.lumberProfile = 's2s4';
   project.groups[0].height = 12;
   project.groups[0].items[0] = { id: 2, label: 'Trash cubby', qty: 1, width: 24, depth: 0, vertical: true };
-  await page.addInitScript(({ key, project }) => localStorage.setItem(key, JSON.stringify(project)), { key, project });
+  await page.addInitScript(({ key, project }) => localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project)), { key, project });
   await page.goto('/');
   const card = page.locator('#previews .preview-card');
   await expect(page.getByLabel('Vertical drawer: Trash cubby')).toBeChecked();
@@ -144,7 +144,7 @@ test('vertical checkbox updates cut counts and remains checked after JSON round 
   const project = structuredClone(sampleProject);
   project.groups[0].items[0].qty = 1;
   project.groups[0].items[0].width = 6;
-  await page.addInitScript(({ key, project }) => localStorage.setItem(key, JSON.stringify(project)), { key, project });
+  await page.addInitScript(({ key, project }) => localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project)), { key, project });
   await page.goto('/');
   const before = Number(await page.locator('#cutListFoot .numeric').innerText());
   await page.getByLabel('Vertical drawer: Upper-left').check();
