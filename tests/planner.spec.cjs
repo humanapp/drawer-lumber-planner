@@ -98,3 +98,46 @@ test('legacy saved project retains its old price and drawer labels', async ({ pa
   await expect(page.getByLabel('4/4 S2S price ($/BF)')).toHaveValue('9');
   await expect(page.getByLabel('Drawer identifier')).toHaveValue('Upper-left');
 });
+
+test('vertical drawer shows two upright panels, vertical seams, and no side crosscuts', async ({ page }) => {
+  const project = structuredClone(sampleProject);
+  project.groups[0].height = 24;
+  project.groups[0].items[0] = { id: 2, label: 'Trash cubby', qty: 1, width: 12, depth: 10, vertical: true };
+  await page.addInitScript(({ key, project }) => localStorage.setItem(key, JSON.stringify(project)), { key, project });
+  await page.goto('/');
+  const card = page.locator('#previews .preview-card');
+  await expect(page.getByLabel('Vertical drawer: Trash cubby')).toBeChecked();
+  await expect(card).toContainText('Vertical');
+  await expect(card.locator('svg polygon')).toHaveCount(2);
+  const seams = await card.locator('svg line').evaluateAll(els =>
+    els.filter(el => el.hasAttribute('stroke-opacity')).map(el => ({
+      x1: +el.getAttribute('x1'), x2: +el.getAttribute('x2'),
+      y1: +el.getAttribute('y1'), y2: +el.getAttribute('y2')
+    }))
+  );
+  expect(seams.length).toBe(2);
+  for (const seam of seams) {
+    expect(seam.x1).toBeCloseTo(seam.x2);
+    expect(seam.y2).toBeGreaterThan(seam.y1);
+  }
+  await expect(page.locator('#cutListBody')).toContainText('30.000');
+  await expect(page.locator('#cutListBody')).not.toContainText('sides');
+  const qty = Number(await page.locator('#cutListFoot .numeric').innerText());
+  expect(qty).toBe(2);
+  await expect(page.locator('[data-itemid="2"]')).toHaveText('4.0');
+  await page.reload();
+  await expect(page.getByLabel('Vertical drawer: Trash cubby')).toBeChecked();
+});
+
+test('vertical checkbox updates cut counts and remains checked after JSON round trip via local storage', async ({ page }) => {
+  const project = structuredClone(sampleProject);
+  project.groups[0].items[0].qty = 1;
+  await page.addInitScript(({ key, project }) => localStorage.setItem(key, JSON.stringify(project)), { key, project });
+  await page.goto('/');
+  const before = Number(await page.locator('#cutListFoot .numeric').innerText());
+  await page.getByLabel('Vertical drawer: Upper-left').check();
+  const after = Number(await page.locator('#cutListFoot .numeric').innerText());
+  expect(after).toBeLessThan(before);
+  await page.reload();
+  await expect(page.getByLabel('Vertical drawer: Upper-left')).toBeChecked();
+});
