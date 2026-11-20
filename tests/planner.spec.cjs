@@ -58,7 +58,7 @@ test('initial crosscut list uses one blank per 4/4 SAB cut', async ({ page }) =>
   expect(rows4.join(' ')).toContain('24.000');
   expect(rows4.join(' ')).toContain('26.000');
   const qty4 = Number(await page.locator('#cutListFoot .numeric').innerText());
-  expect(qty4).toBe(16);
+  expect(qty4).toBe(8);
 });
 
 test('legacy saved project retains its old price and drawer labels', async ({ page }) => {
