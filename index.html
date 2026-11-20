@@ -54,7 +54,7 @@ function setupCollapsibleSections(){
  function wrap(nodes,title){
   const first=nodes[0],details=document.createElement('details');
   details.className='panel collapsible';details.open=true;
-  const summary=document.createElement('summary');summary.textContent=title;
+  const summary=document.createElement('summary');const heading=document.createElement('h2');heading.textContent=title;heading.style.display='inline';summary.append(heading);
   const content=document.createElement('div');content.className='collapse-content';
   first.before(details);details.append(summary,content);
   for(const node of nodes){
