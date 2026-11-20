@@ -250,3 +250,20 @@ test('vertical stock solver ignores depth while using width for crosscut lengths
   expect(second.crosscuts).toBe(first.crosscuts);
   expect(second.parts).toEqual(first.parts);
 });
+
+
+test('actual board assignments suppress legacy assumed glue seams', async ({ page }) => {
+  const project=structuredClone(sampleProject);
+  project.groups[0].height=11;
+  project.groups[0].items[0]={id:2,label:'Tall drawer',qty:1,width:18,depth:20};
+  project.inventory=[{id:'B1',width:12,length:96},{id:'B2',width:12,length:96}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  const result=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(result.assigned).toBe(4);
+  expect(result.glueUps).toBe(0);
+  await expect(page.locator('#previews .preview-card svg line[stroke-opacity="0.42"]')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Export assigned cuts CSV'})).toBeVisible();
+});
