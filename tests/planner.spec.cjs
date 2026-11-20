@@ -23,12 +23,11 @@ test('initial load renders saved drawers and all milling assumptions', async ({ 
   await expect(page.getByRole('heading', { name: /Drawer Lumber Planner/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Lumber & milling assumptions' })).toBeVisible();
   for (const field of [
-    'Purchased lumber profile', 'Board width (in)', 'Board length (ft)',
+    'Board width (in)', 'Board length (ft)',
     'Saw kerf (in)', 'Total edge trim (in)', 'Extra length / part (in)',
-    'Extra width / strip (in)', '4/4 S2S price ($/BF)',
-    '8/4 rough price ($/BF)', 'Safety margin (%)',
+    'Extra width / strip (in)', '4/4 SAB price ($/BF)', 'Safety margin (%)',
   ]) await expect(page.getByLabel(field)).toBeVisible();
-  await expect(page.getByLabel('Purchased lumber profile')).toHaveValue('rough8');
+  await expect(page.getByLabel('Purchased lumber profile')).toHaveCount(0);
   await expect(page.getByLabel('Drawer identifier')).toHaveValue('Upper-left');
   await expect(page.getByLabel('Quantity')).toHaveValue('2');
   await expect(page.locator('#boards')).not.toHaveText('—');
@@ -36,42 +35,21 @@ test('initial load renders saved drawers and all milling assumptions', async ({ 
   await expect(page.locator('#previews .preview-card')).toHaveCount(1);
 });
 
-test('profile selection, assumptions and drawer edits survive reload', async ({ page }) => {
+test('4/4 SAB price, assumptions and drawer edits survive reload', async ({ page }) => {
   await page.goto('/');
-  await page.getByLabel('Purchased lumber profile').selectOption('rough8');
   await page.getByLabel('Board width (in)').fill('10');
-  await page.getByLabel('8/4 rough price ($/BF)').fill('4.5');
+  await page.getByLabel('4/4 SAB price ($/BF)').fill('7.85');
   await page.getByLabel('Drawer identifier').first().fill('Main bank');
   await page.reload();
-  await expect(page.getByLabel('Purchased lumber profile')).toHaveValue('rough8');
+  await expect(page.getByLabel('Purchased lumber profile')).toHaveCount(0);
   await expect(page.getByLabel('Board width (in)')).toHaveValue('10');
-  await expect(page.getByLabel('8/4 rough price ($/BF)')).toHaveValue('4.5');
+  await expect(page.getByLabel('4/4 SAB price ($/BF)')).toHaveValue('7.85');
   await expect(page.getByLabel('Drawer identifier').first()).toHaveValue('Main bank');
   await expect(page.getByLabel('Saw kerf (in)')).toBeVisible();
 });
 
-test('8/4 profile reduces purchased plank count but uses twice nominal board feet per plank', async ({ page }) => {
-  await page.addInitScript(({ key, project }) => {
-    localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project));
-  }, { key, project: { ...sampleProject, settings: { ...sampleProject.settings, lumberProfile: 's2s4' } } });
-  await page.goto('/');
-  const count4 = Number(await page.locator('#boards').innerText());
-  const bf4 = Number(await page.locator('#purchase').innerText());
-  const cost4 = Number((await page.locator('#cost').innerText()).replace(/[$,]/g, ''));
-  await page.getByLabel('Purchased lumber profile').selectOption('rough8');
-  const count8 = Number(await page.locator('#boards').innerText());
-  const bf8 = Number(await page.locator('#purchase').innerText());
-  const cost8 = Number((await page.locator('#cost').innerText()).replace(/[$,]/g, ''));
-  expect(count4).toBeGreaterThan(0);
-  expect(count8).toBe(Math.ceil(count4 / 2));
-  expect(bf8).toBeGreaterThanOrEqual(bf4 - 0.2);
-  expect(bf8).toBeLessThanOrEqual(bf4 + 2 * 8 * 8 / 12 + 0.2);
-  expect(cost8).toBeLessThan(cost4);
-  await expect(page.getByLabel('4/4 S2S price ($/BF)')).toHaveValue('9');
-  await expect(page.getByLabel('8/4 rough price ($/BF)')).toHaveValue('5');
-});
 
-test('initial crosscut list accounts for two resawn layers per 8/4 blank', async ({ page }) => {
+test('initial crosscut list uses one blank per 4/4 SAB cut', async ({ page }) => {
   await page.addInitScript(({ key, project }) => {
     localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project));
   }, { key, project: { ...sampleProject, settings: { ...sampleProject.settings, lumberProfile: 's2s4' } } });
@@ -80,9 +58,7 @@ test('initial crosscut list accounts for two resawn layers per 8/4 blank', async
   expect(rows4.join(' ')).toContain('24.000');
   expect(rows4.join(' ')).toContain('26.000');
   const qty4 = Number(await page.locator('#cutListFoot .numeric').innerText());
-  await page.getByLabel('Purchased lumber profile').selectOption('rough8');
-  const qty8 = Number(await page.locator('#cutListFoot .numeric').innerText());
-  expect(qty8).toBe(Math.ceil(qty4 / 2));
+  expect(qty4).toBe(16);
 });
 
 test('legacy saved project retains its old price and drawer labels', async ({ page }) => {
@@ -94,8 +70,8 @@ test('legacy saved project retains its old price and drawer labels', async ({ pa
   await page.addInitScript(({ key, project }) => localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project)),
     { key, project: legacy });
   await page.goto('/');
-  await expect(page.getByLabel('Purchased lumber profile')).toHaveValue('s2s4');
-  await expect(page.getByLabel('4/4 S2S price ($/BF)')).toHaveValue('9');
+  await expect(page.getByLabel('Purchased lumber profile')).toHaveCount(0);
+  await expect(page.getByLabel('4/4 SAB price ($/BF)')).toHaveValue('9');
   await expect(page.getByLabel('Drawer identifier')).toHaveValue('Upper-left');
 });
 
@@ -152,27 +128,6 @@ test('vertical checkbox updates cut counts and remains checked after JSON round 
   expect(after).toBeLessThan(before);
   await page.reload();
   await expect(page.getByLabel('Vertical drawer: Upper-left')).toBeChecked();
-});
-
-test('6/4 SAB profile uses nominal 1.5-inch purchase thickness, one layer and its own price', async ({ page }) => {
-  const project = structuredClone(sampleProject);
-  project.settings.lumberProfile = 's2s4';
-  project.settings.price6 = 4.25;
-  await page.addInitScript(({ key, project }) => {
-    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(project));
-  }, {key, project});
-  await page.goto('/');
-  const boards4 = Number(await page.locator('#boards').innerText());
-  const bf4 = Number(await page.locator('#purchase').innerText());
-  const cuts4 = await page.locator('#cutListFoot .numeric').innerText();
-  await page.getByLabel('Purchased lumber profile').selectOption('sab6');
-  await expect(page.getByLabel('6/4 SAB price ($/BF)')).toHaveValue('4.25');
-  expect(Number(await page.locator('#boards').innerText())).toBe(boards4);
-  expect(Number(await page.locator('#purchase').innerText())).toBeCloseTo(bf4*1.5, 0);
-  await expect(page.locator('#cutListFoot .numeric')).toHaveText(cuts4);
-  await page.reload();
-  await expect(page.getByLabel('Purchased lumber profile')).toHaveValue('sab6');
-  await expect(page.getByLabel('6/4 SAB price ($/BF)')).toHaveValue('4.25');
 });
 
 
@@ -266,4 +221,20 @@ test('actual board assignments suppress legacy assumed glue seams', async ({ pag
   expect(result.glueUps).toBe(0);
   await expect(page.locator('#previews .preview-card svg line[stroke-opacity="0.42"]')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Export assigned cuts CSV'})).toBeVisible();
+});
+
+test('obsolete 8/4 setting migrates to 4/4 SAB while preserving drawers and inventory', async ({ page }) => {
+  const project=structuredClone(sampleProject);
+  project.inventory=[{id:'B1',label:'SAB maple',width:12,length:96}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  await expect(page.getByLabel('Purchased lumber profile')).toHaveCount(0);
+  await expect(page.getByLabel('4/4 SAB price ($/BF)')).toHaveValue('9');
+  await expect(page.getByLabel('Board B1 label')).toHaveValue('SAB maple');
+  await expect(page.getByLabel('Drawer identifier')).toHaveValue('Upper-left');
+  const boards=Number(await page.locator('#boards').innerText());
+  const purchase=Number(await page.locator('#purchase').innerText());
+  expect(purchase).toBeCloseTo(boards*8*8/12,1);
 });
