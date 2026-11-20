@@ -259,5 +259,5 @@ test('all main sections collapse independently and reset to expanded after reloa
   await expect(groupSection).toHaveAttribute('open','');
   await expect(page.getByRole('button',{name:'+ Add board'})).toBeVisible();
   await expect(page.getByRole('button',{name:'+ Add height group'})).toBeVisible();
-  expect(await page.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))).includes('collapsedSections'))).toBe(false);
+  expect(await page.evaluate(()=>{const saved=localStorage.getItem('drawer-lumber-planner-v1');return saved!==null&&Object.keys(JSON.parse(saved)).includes('collapsedSections')})).toBe(false);
 });
