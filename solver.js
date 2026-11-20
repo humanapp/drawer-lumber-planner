@@ -108,16 +108,33 @@
       }
       candidates.sort((a,b)=>b.width-a.width||a.board.available-b.board.available||a.board.id.localeCompare(b.board.id));
 
-      // Find the fewest complete strips that can cover the panel.
-      // Every selected strip must be at least minGlueWidth, even the final one.
-      // Do not commit any cuts until the entire panel has a feasible assignment.
-      let capacity=0,selected=[];
-      for(const candidate of candidates){
-        selected.push(candidate);
-        capacity+=candidate.width;
-        if(selected.length>=2 &&
-           selected.length*minGlueWidth<=part.width+eps &&
-           capacity+eps>=part.width)break;
+      // Find two-strip combinations first, preferring the least excess stock
+      // width. Taking two wide blanks from the same board can strand another
+      // complete panel even when a wide + narrow combination fits.
+      // Treat each candidate as one physical crosscut slot.
+      let selected=[],capacity=0,bestExcess=Infinity;
+      if(part.width+eps>=2*minGlueWidth){
+        for(let i=0;i<candidates.length;i++){
+          for(let j=i+1;j<candidates.length;j++){
+            const total=candidates[i].width+candidates[j].width;
+            const excess=total-part.width;
+            if(excess>=-eps && excess<bestExcess-eps){
+              selected=[candidates[i],candidates[j]];
+              capacity=total;
+              bestExcess=excess;
+            }
+          }
+        }
+      }
+      // Larger glue-ups are an approximate fallback.
+      if(!selected.length){
+        for(const candidate of candidates){
+          selected.push(candidate);
+          capacity+=candidate.width;
+          if(selected.length>=2 &&
+             selected.length*minGlueWidth<=part.width+eps &&
+             capacity+eps>=part.width)break;
+        }
       }
       if(selected.length<2 ||
          selected.length*minGlueWidth>part.width+eps ||
