@@ -97,26 +97,48 @@
     }
     // Only then try edge-glued construction for leftover complete panels.
     // A partial glue-up is never committed: it stays in the unassigned list.
+    const minGlueWidth = settings.minGlueWidth === undefined ? 2 : n(settings.minGlueWidth);
     const unfilled=[...availableParts.values()].sort((a,b)=>b.width-a.width||b.length-a.length);
     for(const part of unfilled){
       const candidates=[];
       for(const board of inventory){
+        if(board.usableWidth + eps < minGlueWidth)continue;
         const count=slots(board,part.length);
         for(let i=0;i<count;i++)candidates.push({board,width:board.usableWidth});
       }
       candidates.sort((a,b)=>b.width-a.width||a.board.available-b.board.available||a.board.id.localeCompare(b.board.id));
-      let remaining=part.width;const selected=[];
+
+      // Find the fewest complete strips that can cover the panel.
+      // Every selected strip must be at least minGlueWidth, even the final one.
+      // Do not commit any cuts until the entire panel has a feasible assignment.
+      let capacity=0,selected=[];
       for(const candidate of candidates){
-        if(remaining<=eps)break;
-        const width=Math.min(candidate.width,remaining);
-        if(width<=0)continue;
-        selected.push({board:candidate.board,width});
+        selected.push(candidate);
+        capacity+=candidate.width;
+        if(selected.length>=2 &&
+           selected.length*minGlueWidth<=part.width+eps &&
+           capacity+eps>=part.width)break;
+      }
+      if(selected.length<2 ||
+         selected.length*minGlueWidth>part.width+eps ||
+         capacity+eps<part.width)continue;
+
+      // Allocate narrower available widths first, reserving at least the
+      // minimum for every other strip. This avoids leftover slivers.
+      selected=selected.slice().sort((a,b)=>a.width-b.width||a.board.id.localeCompare(b.board.id));
+      let remaining=part.width;
+      const lanes=[];
+      for(let i=0;i<selected.length;i++){
+        const future=(selected.length-i-1)*minGlueWidth;
+        const width=Math.min(selected[i].width,remaining-future);
+        if(width+eps<minGlueWidth)break;
+        lanes.push({board:selected[i].board,width});
         remaining-=width;
       }
-      if(remaining>eps || selected.length<2)continue;
-      selected.forEach((x,index)=>appendCut(x.board,part.length,[{
+      if(lanes.length!==selected.length || remaining>eps)continue;
+      lanes.forEach((x,index)=>appendCut(x.board,part.length,[{
         partId:part.id,drawerId:part.drawerId,drawerLabel:part.drawerLabel,role:part.role,
-        copy:part.copy,width:x.width,strip:index+1,strips:selected.length,offset:0
+        copy:part.copy,width:x.width,strip:index+1,strips:lanes.length,offset:0
       }]));
       availableParts.delete(part.id);
     }
