@@ -173,7 +173,7 @@ function renderAllocation(){
 
 function render(){settingsUI();renderInventory();$('groups').replaceChildren();for(const g of state.groups){const section=document.createElement('section');section.className='group';const header=document.createElement('div');header.className='head';const left=document.createElement('div');left.className='actions';left.style.alignItems='center';const strong=document.createElement('strong');strong.textContent='Height';const height=input(g.height,.125,'Group height',v=>{g.height=v;save();update()});height.className='height-input';left.append(strong,height,document.createTextNode('in'));const buttons=document.createElement('div');buttons.className='actions';buttons.append(makeButton('+ Drawer',()=>{g.items.push({id:nextID++,qty:1,width:18,depth:20});save();render()}),makeButton('Remove group',()=>{state.groups=state.groups.filter(x=>x.id!==g.id);save();render()}));header.append(left,buttons);section.append(header);
 const titles=document.createElement('div');titles.className='drawer-head';['Label','Qty','Width (in)','Depth (in)','4/4 BF','Vertical',''].forEach((v,i)=>{const x=document.createElement('span');x.textContent=v;if(i===4)x.className='bf';titles.append(x)});section.append(titles);
-for(const item of g.items){const row=document.createElement('div');row.className='drawer-row';const name=document.createElement('input');name.type='text';name.placeholder='Drawer ID';name.setAttribute('aria-label','Drawer identifier');name.value=item.label||'';name.oninput=()=>{item.label=name.value;save();renderPreviews();showCutList()};row.append(name);for(const [key,label,step] of [['qty','Quantity',1],['width','Width',.125],['depth','Depth',.125]])row.append(input(item[key],step,label,v=>{item[key]=v;save();update()}));const depthInput=row.querySelector('input[aria-label="Depth"]');if(depthInput)depthInput.title=item.vertical===true?'Visual panel separation only; ignored in lumber calculations':'';const bf=document.createElement('div');bf.className='bf';bf.dataset.itemid=item.id;row.append(bf);const vertical=document.createElement('input');vertical.type='checkbox';vertical.checked=item.vertical===true;vertical.style.cssText='width:18px;height:18px;justify-self:center';vertical.setAttribute('aria-label','Vertical drawer: '+(item.label||item.id));vertical.onchange=()=>{item.vertical=vertical.checked;if(depthInput)depthInput.title=vertical.checked?'Visual panel separation only; ignored in lumber calculations':'';save();update()};row.append(vertical,makeButton('×',()=>{g.items=g.items.filter(x=>x.id!==item.id);save();render()}));section.append(row)}
+for(const item of g.items){const row=document.createElement('div');row.className='drawer-row';const name=document.createElement('input');name.type='text';name.placeholder='Drawer ID';name.setAttribute('aria-label','Drawer identifier');name.value=item.label||'';name.oninput=()=>{item.label=name.value;save();renderPreviews();showCutList();renderAllocation()};row.append(name);for(const [key,label,step] of [['qty','Quantity',1],['width','Width',.125],['depth','Depth',.125]])row.append(input(item[key],step,label,v=>{item[key]=v;save();update()}));const depthInput=row.querySelector('input[aria-label="Depth"]');if(depthInput)depthInput.title=item.vertical===true?'Visual panel separation only; ignored in lumber calculations':'';const bf=document.createElement('div');bf.className='bf';bf.dataset.itemid=item.id;row.append(bf);const vertical=document.createElement('input');vertical.type='checkbox';vertical.checked=item.vertical===true;vertical.style.cssText='width:18px;height:18px;justify-self:center';vertical.setAttribute('aria-label','Vertical drawer: '+(item.label||item.id));vertical.onchange=()=>{item.vertical=vertical.checked;if(depthInput)depthInput.title=vertical.checked?'Visual panel separation only; ignored in lumber calculations':'';save();update()};row.append(vertical,makeButton('×',()=>{g.items=g.items.filter(x=>x.id!==item.id);save();render()}));section.append(row)}
 $('groups').append(section)}update()}
 
 function packParts(parts,boardWidth,boardLength,kerf){
@@ -271,8 +271,8 @@ function renderPreviews(){
    const x=(255-W-offsetX)/2,y=(160-H+offsetY)/2;
    const A=[x,y],B=[x+W,y],E=[x+offsetX,y-offsetY],C=[x+W+offsetX,y-offsetY];
    const down=p=>[p[0],p[1]+H];
-   svg.append(svgNode('polygon',{points:poly([E,C,down(C),down(E)]),fill:'#b79b75',...line}));
-   svg.append(svgNode('polygon',{points:poly([A,B,down(B),down(A)]),fill:'#d9b58a',...line}));
+   svg.append(markFace(svgNode('polygon',{points:poly([E,C,down(C),down(E)]),fill:'#b79b75',...line}),item,'back'));
+   svg.append(markFace(svgNode('polygon',{points:poly([A,B,down(B),down(A)]),fill:'#d9b58a',...line}),item,'front'));
    const strips=usableWidth>0?Math.max(1,Math.ceil((panelWidth+num(state.settings.widthExtra))/usableWidth)):1;
    for(let j=1;j<strips;j++){
     const fraction=j/strips;
@@ -286,10 +286,12 @@ function renderPreviews(){
    const x0=(255-W-0.52*D)/2,y0=(160+H+0.29*D)/2-H;
    const A=[x0,y0],B=[x0+W,y0],C=[x0+W+0.52*D,y0-0.29*D],E=[x0+0.52*D,y0-0.29*D];
    const lower=p=>[p[0],p[1]+H];
-   svg.append(svgNode('polygon',{points:poly([E,C,lower(C),lower(E)]),fill:'#b79b75',...line}));
+   svg.append(markFace(svgNode('polygon',{points:poly([E,C,lower(C),lower(E)]),fill:'#b79b75',...line}),item,'back'));
    svg.append(svgNode('polygon',{points:poly([lower(A),lower(B),lower(C),lower(E)]),fill:'#e7d4b7',stroke:'#927552','stroke-width':1}));
-   svg.append(svgNode('polygon',{points:poly([B,C,lower(C),lower(B)]),fill:'#bc996b',...line}));
-   svg.append(svgNode('polygon',{points:poly([A,B,lower(B),lower(A)]),fill:'#d9b58a',...line}));
+   svg.append(markFace(svgNode('polygon',{points:poly([B,C,lower(C),lower(B)]),fill:'#bc996b',...line}),item,'right'));
+   svg.append(markFace(svgNode('polygon',{points:poly([A,B,lower(B),lower(A)]),fill:'#d9b58a',...line}),item,'front'));
+   // The left wall is normally occluded; make its outline visible only on hover.
+   svg.append(markFace(svgNode('polygon',{points:poly([A,E,lower(E),lower(A)]),fill:'#d9b58a','fill-opacity':0,'stroke-opacity':0,...line}),item,'left'));
    svg.append(svgNode('polyline',{points:poly([A,E,C,B]),fill:'none',stroke:'#745b41','stroke-width':2,'stroke-linejoin':'round'}));
    svg.append(svgNode('line',{x1:A[0],y1:A[1],x2:A[0],y2:A[1]+H,stroke:'#745b41','stroke-width':1.5}));
    const strips=usableWidth>0?Math.max(1,Math.ceil((h+num(state.settings.widthExtra))/usableWidth)):1;
