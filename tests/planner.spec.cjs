@@ -174,3 +174,79 @@ test('6/4 SAB profile uses nominal 1.5-inch purchase thickness, one layer and it
   await expect(page.getByLabel('Purchased lumber profile')).toHaveValue('sab6');
   await expect(page.getByLabel('6/4 SAB price ($/BF)')).toHaveValue('4.25');
 });
+
+
+test('measured wide board packs paired panels into two full-width crosscuts', async ({ page }) => {
+  const project=structuredClone(sampleProject);
+  project.settings.lumberProfile='s2s4';
+  project.groups[0].items[0]={id:2,label:'Cabinet A',qty:1,width:18,depth:20};
+  project.inventory=[{id:'B1',label:'Maple 12',width:12,length:96}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  const result=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(result.assigned).toBe(4);
+  expect(result.unassigned).toHaveLength(0);
+  expect(result.crosscuts).toBe(2);
+  expect(result.glueUps).toBe(0);
+  expect(result.boards[0].cuts.map(x=>x.lanes.length)).toEqual([2,2]);
+  await expect(page.locator('#boardLayouts svg')).toHaveCount(1);
+  await expect(page.locator('#solverSummary')).toContainText('4 / 4');
+  const region=page.locator('#boardLayouts .board-cut').first();
+  const role=await region.getAttribute('aria-label');
+  const expected=role.includes('front')?'front':role.includes('back')?'back':role.includes('left')?'left':'right';
+  await region.hover();
+  await expect(page.locator('.part-face.is-highlighted')).toHaveAttribute('data-part',expected);
+  await page.mouse.move(0,0);
+  await expect(page.locator('.part-face.is-highlighted')).toHaveCount(0);
+});
+
+test('measured inventory persists and unassigned panels are reported', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button',{name:'+ Add board'}).click();
+  await page.getByLabel('Board B1 label').fill('Maple 6 inch');
+  await page.getByLabel('Board B1 width').fill('6');
+  await page.getByLabel('Board B1 length').fill('40');
+  await page.reload();
+  await expect(page.getByLabel('Board B1 label')).toHaveValue('Maple 6 inch');
+  await expect(page.getByLabel('Board B1 length')).toHaveValue('40');
+  await expect(page.locator('#solverSummary')).toContainText('Unassigned panels');
+  await expect(page.locator('#solverUnassigned')).toContainText('panels still need stock');
+});
+
+test('missing stock does not commit incomplete multi-strip glue-ups', async ({ page }) => {
+  const project=structuredClone(sampleProject);
+  project.settings.lumberProfile='s2s4';
+  project.groups[0].height=11;
+  project.groups[0].items[0]={id:2,label:'Tall box',qty:1,width:18,depth:20};
+  project.inventory=[{id:'B1',width:6,length:32}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  const result=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(result.assigned).toBe(0);
+  expect(result.unassigned).toHaveLength(4);
+  expect(result.crosscuts).toBe(0);
+});
+
+test('vertical stock solver ignores depth while using width for crosscut lengths', async ({ page }) => {
+  const project=structuredClone(sampleProject);
+  project.settings.lumberProfile='s2s4';
+  project.groups[0].height=6;
+  project.groups[0].items[0]={id:2,label:'Spice',qty:1,width:24,depth:10,vertical:true};
+  project.inventory=[{id:'B1',width:12,length:66}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  const first=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(first.parts).toHaveLength(2);
+  expect(first.crosscuts).toBe(1);
+  expect(first.boards[0].cuts[0].length).toBe(30);
+  await page.getByLabel('Depth').fill('50');
+  const second=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(second.crosscuts).toBe(first.crosscuts);
+  expect(second.parts).toEqual(first.parts);
+});
