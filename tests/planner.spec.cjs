@@ -238,3 +238,26 @@ test('obsolete 8/4 setting migrates to 4/4 SAB while preserving drawers and inve
   const purchase=Number(await page.locator('#purchase').innerText());
   expect(purchase).toBeCloseTo(boards*8*8/12,1);
 });
+
+
+test('all main sections collapse independently and reset to expanded after reload', async ({ page }) => {
+  await page.goto('/');
+  const sections=page.locator('main > details.collapsible');
+  await expect(sections).toHaveCount(9);
+  for(const section of await sections.all())await expect(section).toHaveAttribute('open','');
+  const inventory=page.locator('main > details.collapsible').filter({has:page.getByRole('heading',{name:'Measured lumber inventory'})});
+  await inventory.locator('summary').click();
+  await expect(inventory).not.toHaveAttribute('open','');
+  await expect(page.getByRole('button',{name:'+ Add board'})).not.toBeVisible();
+  const groupSection=page.locator('main > details.collapsible').filter({has:page.getByRole('heading',{name:'Drawer height groups'})});
+  await expect(groupSection).toHaveAttribute('open','');
+  await groupSection.locator('summary').click();
+  await expect(groupSection).not.toHaveAttribute('open','');
+  await expect(page.getByRole('button',{name:'+ Add height group'})).not.toBeVisible();
+  await page.reload();
+  await expect(inventory).toHaveAttribute('open','');
+  await expect(groupSection).toHaveAttribute('open','');
+  await expect(page.getByRole('button',{name:'+ Add board'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'+ Add height group'})).toBeVisible();
+  expect(await page.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))).includes('collapsedSections'))).toBe(false);
+});
