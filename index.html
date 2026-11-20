@@ -86,10 +86,10 @@ function renderInventory(){
   const name=document.createElement('input');name.type='text';name.value=board.label||board.id;name.setAttribute('aria-label','Board '+board.id+' label');name.oninput=()=>{board.label=name.value;save();renderAllocation()};
   row.append(name);
   for(const [key,desc] of [['width','width'],['length','length']]){
-   const field=input(board[key],.125,'Board '+board.id+' '+desc,value=>{board[key]=value;save();renderAllocation();renderInventoryTotal()});
+   const field=input(board[key],.125,'Board '+board.id+' '+desc,value=>{board[key]=value;save();renderPreviews();renderAllocation();renderInventoryTotal()});
    row.append(field);
   }
-  row.append(makeButton('×',()=>{state.inventory=state.inventory.filter(b=>b.id!==board.id);save();renderInventory();renderAllocation()}));
+  row.append(makeButton('×',()=>{state.inventory=state.inventory.filter(b=>b.id!==board.id);save();renderInventory();renderPreviews();renderAllocation()}));
   host.append(row);
  }
  renderInventoryTotal();
@@ -444,7 +444,7 @@ $('exportMeasured').onclick=()=>{
  for(const p of plan.unassigned)lines.push([csvEscape(p.drawerLabel),p.copy,csvEscape(p.role),p.length.toFixed(3),p.width.toFixed(3)].join(','));
  download('drawer-measured-crosscut-plan.csv',lines.join('\r\n'),'text/csv');
 };
-$('addBoard').onclick=()=>{const id='B'+nextBoardID++;state.inventory.push({id,label:id,width:6,length:96});save();renderInventory();renderAllocation();const field=document.querySelector('input[aria-label="Board '+id+' width"]');if(field){field.focus();field.select()}};
+$('addBoard').onclick=()=>{const id='B'+nextBoardID++;state.inventory.push({id,label:id,width:6,length:96});save();renderInventory();renderPreviews();renderAllocation();const field=document.querySelector('input[aria-label="Board '+id+' width"]');if(field){field.focus();field.select()}};
 $('addGroup').onclick=()=>{state.groups.push({id:nextID++,height:5,items:[{id:nextID++,qty:1,width:18,depth:20}]});save();render()};
 $('reset').onclick=()=>{if(confirm('Replace drawer entries with examples?')){state=defaults();nextBoardID=1;save();render()}};
 $('exportCutList').onclick=()=>{const {rows,total}=crosscutRows(),lines=['Crosscut Length (in),Quantity,Drawer Uses'];for(const r of rows)lines.push([r.length.toFixed(3),r.count,csvEscape(r.uses.join('; '))].join(','));lines.push('Total blanks,'+total);download('drawer-initial-crosscut-list.csv',lines.join('\r\n'),'text/csv')};
