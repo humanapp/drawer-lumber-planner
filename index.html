@@ -53,6 +53,124 @@ function settingsUI(){
   f.append(l,input(state.settings[key],step,name,v=>{state.settings[key]=v;save();update()}));host.append(f);
  }
 }
+
+function renderInventory(){
+ const host=$('stockBoards');host.replaceChildren();
+ if(!Array.isArray(state.inventory))state.inventory=[];
+ if(!state.inventory.length){const p=document.createElement('p');p.className='note';p.textContent='No measured boards entered yet. Add your purchased maple boards to generate a cutting plan.';host.append(p)}
+ for(const board of state.inventory){
+  const row=document.createElement('div');row.className='inventory-row';
+  const name=document.createElement('input');name.type='text';name.value=board.label||board.id;name.setAttribute('aria-label','Board '+board.id+' label');name.oninput=()=>{board.label=name.value;save();renderAllocation()};
+  row.append(name);
+  for(const [key,desc] of [['width','width'],['length','length']]){
+   const field=input(board[key],.125,'Board '+board.id+' '+desc,value=>{board[key]=value;save();renderAllocation();renderInventoryTotal()});
+   row.append(field);
+  }
+  row.append(makeButton('×',()=>{state.inventory=state.inventory.filter(b=>b.id!==board.id);save();renderInventory();renderAllocation()}));
+  host.append(row);
+ }
+ renderInventoryTotal();
+}
+function renderInventoryTotal(){
+ const boards=state.inventory||[];
+ const bf=boards.reduce((total,b)=>total+num(b.width)*num(b.length)/144,0);
+ $('inventoryTotal').textContent=boards.length+' measured boards · '+bf.toFixed(2)+' nominal 4/4 BF from measured dimensions (not supplier tally)';
+}
+let hoveredPart=null;
+function highlightPart(part){
+ const current=part?String(part.drawerId)+'/'+part.role:null;
+ if(current===hoveredPart)return;
+ hoveredPart=current;
+ document.querySelectorAll('.part-face.is-highlighted').forEach(el=>el.classList.remove('is-highlighted'));
+ if(!part)return;
+ document.querySelectorAll('.part-face').forEach(el=>{
+  if(el.getAttribute('data-drawer-id')===String(part.drawerId)&&el.getAttribute('data-part')===part.role)el.classList.add('is-highlighted');
+ });
+}
+function markFace(element,item,role){
+ element.setAttribute('class','part-face');
+ element.setAttribute('data-drawer-id',String(item.id));
+ element.setAttribute('data-part',role);
+ return element;
+}
+function renderAllocation(){
+ const result=window.DrawerSolver.solve(state);
+ const host=$('boardLayouts'),summary=$('solverSummary'),missing=$('solverUnassigned');
+ host.replaceChildren();summary.replaceChildren();missing.replaceChildren();
+ hoveredPart=null;
+ for(const [label,value] of [
+  ['Assigned panels',result.assigned+' / '+result.parts.length],
+  ['Full-width crosscuts',result.crosscuts],
+  ['Glue-up panels',result.glueUps],
+  ['Unassigned panels',result.unassigned.length]
+ ]){
+  const div=document.createElement('span');
+  const strong=document.createElement('strong');strong.textContent=String(value);
+  div.append(strong,document.createTextNode(' '+label));summary.append(div);
+ }
+ if(!result.boards.length){
+  const p=document.createElement('p');p.className='note';p.textContent='Enter measured boards above to see a proposed cutting plan.';host.append(p);
+ }else{
+  const maxLength=Math.max(...result.boards.map(b=>b.length));
+  const scale=790/maxLength;
+  for(const board of result.boards){
+   const card=document.createElement('div');card.className='board-layout';
+   const name=document.createElement('strong');name.textContent=board.label+' — '+board.width.toFixed(2)+'" × '+board.length.toFixed(2)+'"';
+   const note=document.createElement('small');note.className='muted';note.textContent=' '+board.cuts.length+' crosscuts · '+board.available.toFixed(2)+'" uncut tail';
+   const svgHeight=Math.max(48,board.width*7+25),rectH=Math.max(24,board.width*7);
+   const svg=svgNode('svg',{viewBox:'0 0 840 '+svgHeight,role:'group','aria-label':'Proposed cuts for '+board.label});
+   const x0=12,y0=12,lengthPx=board.length*scale;
+   svg.append(svgNode('rect',{x:x0,y:y0,width:lengthPx,height:rectH,fill:'#e3cfab',stroke:'#806647','stroke-width':1.5,rx:2}));
+   for(let ci=0;ci<board.cuts.length;ci++){
+    const cut=board.cuts[ci],left=x0+cut.start*scale,cw=cut.length*scale;
+    const rect=svgNode('rect',{x:left,y:y0,width:cw,height:rectH,fill:ci%2?'#d7bd96':'#ecd9b9',stroke:'#826340','stroke-width':1});
+    svg.append(rect);
+    const totalUsable=board.usableWidth;
+    const padding=Math.max(0,(board.width-totalUsable)/2)*rectH/board.width;
+    const laneScale=rectH/board.width;
+    for(const lane of cut.lanes){
+     const laneY=y0+padding+lane.offset*laneScale;
+     const laneH=Math.max(1,lane.width*laneScale);
+     const region=svgNode('rect',{x:left+1,y:laneY,width:Math.max(1,cw-2),height:laneH,
+       fill:'#d49e62','fill-opacity':0.18,stroke:'#99744c','stroke-width':0.65,
+       'stroke-dasharray':'3 2',class:'board-cut',tabindex:0,role:'button',
+       'aria-label':board.label+' cut '+(ci+1)+': '+lane.drawerLabel+' #'+lane.copy+' '+lane.role+
+          (lane.strips>1?' glue strip '+lane.strip+'/'+lane.strips:'')});
+     const title=svgNode('title',{},lane.drawerLabel+' #'+lane.copy+' '+lane.role+' · '+cut.length.toFixed(2)+'" length × '+lane.width.toFixed(2)+'" width'+(lane.strips>1?' · strip '+lane.strip+'/'+lane.strips:''));
+     region.append(title);
+     const target={drawerId:lane.drawerId,role:lane.role};
+     region.addEventListener('pointerenter',()=>highlightPart(target));
+     region.addEventListener('pointerleave',()=>highlightPart(null));
+     region.addEventListener('focus',()=>highlightPart(target));
+     region.addEventListener('blur',()=>highlightPart(null));
+     svg.append(region);
+    }
+    if(cw>37){
+     const first=cut.lanes[0];
+     const text=svgNode('text',{x:left+4,y:y0+rectH+13,'font-size':10,fill:'var(--text)'},first.drawerLabel.slice(0,17)+(cut.lanes.length>1?' ×'+cut.lanes.length:''));
+     svg.append(text);
+    }
+   }
+   if(board.available>0.01){
+    const start=x0+(board.length-board.available)*scale;
+    if(board.available*scale>37)svg.append(svgNode('text',{x:start+4,y:y0+rectH*.55,'font-size':10,fill:'#725d46'},'Unused'));
+   }
+   card.append(name,note,svg);host.append(card);
+  }
+ }
+ if(result.unassigned.length){
+  const title=document.createElement('p');title.className='warn';title.textContent=result.unassigned.length+' panels still need stock; no incomplete glue-up panels were assigned.';
+  const list=document.createElement('ul');list.className='solver-unassigned';
+  const groups=new Map();
+  for(const p of result.unassigned){
+   const key=p.drawerLabel+' — '+p.role+' · '+p.length.toFixed(2)+'" × '+p.width.toFixed(2)+'"';
+   groups.set(key,(groups.get(key)||0)+1);
+  }
+  for(const [name,count] of groups){const li=document.createElement('li');li.textContent=count+' × '+name;list.append(li)}
+  missing.append(title,list);
+ }else if(result.parts.length){const msg=document.createElement('p');msg.className='note';msg.textContent='All drawer panels assigned to the measured stock. Confirm defects, grain, and actual widths before cutting.';missing.append(msg)}
+}
+
 function render(){settingsUI();renderInventory();$('groups').replaceChildren();for(const g of state.groups){const section=document.createElement('section');section.className='group';const header=document.createElement('div');header.className='head';const left=document.createElement('div');left.className='actions';left.style.alignItems='center';const strong=document.createElement('strong');strong.textContent='Height';const height=input(g.height,.125,'Group height',v=>{g.height=v;save();update()});height.className='height-input';left.append(strong,height,document.createTextNode('in'));const buttons=document.createElement('div');buttons.className='actions';buttons.append(makeButton('+ Drawer',()=>{g.items.push({id:nextID++,qty:1,width:18,depth:20});save();render()}),makeButton('Remove group',()=>{state.groups=state.groups.filter(x=>x.id!==g.id);save();render()}));header.append(left,buttons);section.append(header);
 const titles=document.createElement('div');titles.className='drawer-head';['Label','Qty','Width (in)','Depth (in)','4/4 BF','Vertical',''].forEach((v,i)=>{const x=document.createElement('span');x.textContent=v;if(i===4)x.className='bf';titles.append(x)});section.append(titles);
 for(const item of g.items){const row=document.createElement('div');row.className='drawer-row';const name=document.createElement('input');name.type='text';name.placeholder='Drawer ID';name.setAttribute('aria-label','Drawer identifier');name.value=item.label||'';name.oninput=()=>{item.label=name.value;save();renderPreviews();showCutList()};row.append(name);for(const [key,label,step] of [['qty','Quantity',1],['width','Width',.125],['depth','Depth',.125]])row.append(input(item[key],step,label,v=>{item[key]=v;save();update()}));const depthInput=row.querySelector('input[aria-label="Depth"]');if(depthInput)depthInput.title=item.vertical===true?'Visual panel separation only; ignored in lumber calculations':'';const bf=document.createElement('div');bf.className='bf';bf.dataset.itemid=item.id;row.append(bf);const vertical=document.createElement('input');vertical.type='checkbox';vertical.checked=item.vertical===true;vertical.style.cssText='width:18px;height:18px;justify-self:center';vertical.setAttribute('aria-label','Vertical drawer: '+(item.label||item.id));vertical.onchange=()=>{item.vertical=vertical.checked;if(depthInput)depthInput.title=vertical.checked?'Visual panel separation only; ignored in lumber calculations':'';save();update()};row.append(vertical,makeButton('×',()=>{g.items=g.items.filter(x=>x.id!==item.id);save();render()}));section.append(row)}
@@ -249,6 +367,7 @@ function update(){
  }
  renderPreviews();
  showCutList();
+ renderAllocation();
 }
 
 function download(name,body,type){const url=URL.createObjectURL(new Blob([body],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1500)}
@@ -259,6 +378,7 @@ function fromCSV(raw){const lines=raw.replace(/^\uFEFF/,'').split(/\r?\n/).filte
 $('saveProject').onclick=()=>{download('drawer-lumber-project.json',JSON.stringify({format:'drawer-lumber-planner',version:1,exportedAt:new Date().toISOString(),project:state},null,2),'application/json');$('status').textContent='Project backup downloaded.'};
 $('loadProject').onclick=()=>$('projectFile').click();
 $('projectFile').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{const raw=await f.text(),newState=f.name.toLowerCase().endsWith('.csv')?fromCSV(raw):fromJSON(raw);if(!confirm('Replace the current drawer set with the imported project?'))return;state=newState;nextID=Math.max(10,...state.groups.flatMap(g=>[g.id,...g.items.map(x=>x.id)]))+1;nextBoardID=Math.max(0,...state.inventory.map(b=>Number(String(b.id||'').match(/^B(\d+)$/)?.[1])||0))+1;save();render();$('status').textContent='Project imported and autosaved.'}catch(err){$('status').textContent='Import failed: '+err.message}finally{e.target.value=''}};
+$('addBoard').onclick=()=>{const id='B'+nextBoardID++;state.inventory.push({id,label:id,width:6,length:96});save();renderInventory();renderAllocation();const field=document.querySelector('input[aria-label="Board '+id+' width"]');if(field){field.focus();field.select()}};
 $('addGroup').onclick=()=>{state.groups.push({id:nextID++,height:5,items:[{id:nextID++,qty:1,width:18,depth:20}]});save();render()};
 $('reset').onclick=()=>{if(confirm('Replace drawer entries with examples?')){state=defaults();nextBoardID=1;save();render()}};
 $('exportCutList').onclick=()=>{const {rows,total}=crosscutRows(),lines=['Crosscut Length (in),Quantity,Drawer Uses'];for(const r of rows)lines.push([r.length.toFixed(3),r.count,csvEscape(r.uses.join('; '))].join(','));lines.push('Total blanks,'+total);download('drawer-initial-crosscut-list.csv',lines.join('\r\n'),'text/csv')};
