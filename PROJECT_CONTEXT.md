@@ -70,5 +70,8 @@ The solver section renders each entered board at common length scale, with stock
 
 Browser regression tests cover allocation, hover correspondence, persistence, incomplete glue-ups, vertical dimensions, and seam accuracy. The user has purchased about 65 BF of **4/4 SAB hard maple at $7.85/BF**, with mixed nominal 6-inch and 12-inch widths; individual board dimensions are not yet recorded in the app and should not be fabricated.
 
+## Fixed 4/4 SAB material (v3.2)
+The user has purchased 65 BF of mixed-width 4/4 SAB hard maple at $7.85 per BF and is no longer comparing lumber profiles. The app has removed 4/4 S2S, 6/4 SAB and 8/4 rough profile selector; all generic cost / board count estimates now assume exactly **4/4 SAB hard maple at nominal one-inch board-foot thickness, one layer per plank**, with a single user-editable `price4` field labeled "4/4 SAB price ($/BF)". Default price is $7.85/BF. Saved drawers and measured inventory remain in the same localStorage key and import/export schema, including backwards compatible settings; obsolete profile fields can remain in old JSON without influencing calculations. Legacy custom price4 values are retained. Inventory solver consumes actual measured board dimensions rather than nominal stock widths; original generic estimate remains supplementary.
+
 ## Calculation caution
 The first implementations estimate strip yield per height group and use a simplified average length calculation; they do not optimize crosscuts on finite 8–10 foot purchased boards. Check the per-part extra-length convention carefully before relying on purchasing totals. Consider a unit-tested cut optimizer as a future improvement.
