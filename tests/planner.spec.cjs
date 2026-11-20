@@ -236,7 +236,7 @@ test('vertical stock solver ignores depth while using width for crosscut lengths
   project.settings.lumberProfile='s2s4';
   project.groups[0].height=6;
   project.groups[0].items[0]={id:2,label:'Spice',qty:1,width:24,depth:10,vertical:true};
-  project.inventory=[{id:'B1',width:12,length:66}];
+  project.inventory=[{id:'B1',width:14,length:66}];
   await page.addInitScript(({key,project})=>{
     if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
   },{key,project});
