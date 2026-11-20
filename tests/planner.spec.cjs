@@ -304,3 +304,49 @@ test('older saved projects default minimum glue-up strip to 2 inches', async ({ 
   await page.reload();
   await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('2.5');
 });
+
+
+test('unassigned drawer surfaces are red while assigned surfaces stay normal', async ({ page }) => {
+  const project=structuredClone(sampleProject);
+  project.groups[0].items=[{id:2,label:'Partial drawer',qty:1,width:18,depth:20}];
+  project.inventory=[{id:'B1',label:'One 6-inch board',width:6,length:26}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  const plan=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(plan.assigned).toBe(1);
+  expect(plan.unassigned).toHaveLength(3);
+  const faces=page.locator('#previews .preview-card .part-face');
+  await expect(faces).toHaveCount(4);
+  for(const role of ['front','back','left','right']){
+    const assigned=plan.assignments['2:1:'+role];
+    const surface=page.locator('#previews .part-face[data-part="'+role+'"]');
+    if(assigned)await expect(surface).not.toHaveClass(/is-unassigned/);
+    else{
+      await expect(surface).toHaveClass(/is-unassigned/);
+      await expect(surface).toHaveAttribute('data-unassigned-count','1');
+    }
+  }
+  const cut=page.locator('#boardLayouts .board-cut').first();
+  const assignedRole=plan.boards[0].cuts[0].lanes[0].role;
+  await cut.hover();
+  await expect(page.locator('#previews .part-face[data-part="'+assignedRole+'"]')).toHaveClass(/is-highlighted/);
+});
+
+test('unassigned tint clears when enough boards are added', async ({ page }) => {
+  const project=structuredClone(sampleProject);
+  project.groups[0].items=[{id:2,label:'Drawer A',qty:1,width:18,depth:20}];
+  project.inventory=[{id:'B1',width:6,length:26}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  await expect(page.locator('#previews .part-face.is-unassigned')).toHaveCount(3);
+  await page.getByRole('button',{name:'+ Add board'}).click();
+  await page.getByLabel('Board B2 width').fill('12');
+  await page.getByLabel('Board B2 length').fill('96');
+  await expect(page.locator('#previews .part-face.is-unassigned')).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('#previews .part-face.is-unassigned')).toHaveCount(0);
+});
