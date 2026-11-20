@@ -26,7 +26,9 @@ const KEY='drawer-lumber-planner-v1';
 const defaults=()=>({inventory:[],settings:{stockWidth:8,stockThickness:1,price4:7.85,boardLength:8,kerf:.125,edgeTrim:.5,endExtra:6,widthExtra:.25,price:6,margin:0},groups:[{id:1,height:5,items:[{id:2,qty:8,width:18,depth:20}]},{id:3,height:7,items:[{id:4,qty:8,width:18,depth:20}]},{id:5,height:11,items:[{id:6,qty:8,width:18,depth:20}]}]});
 const $=id=>document.getElementById(id),num=v=>Math.max(0,Number(v)||0),fmt=x=>Number.isFinite(x)?x.toFixed(1):'—';
 let state;try{state=JSON.parse(localStorage.getItem(KEY))||defaults();if(!Array.isArray(state.groups)||!state.settings)throw Error()}catch(e){state=defaults()}
+const savedPrice4=state.settings.price4;
 state.settings={...defaults().settings,...state.settings};
+if(savedPrice4===undefined||savedPrice4===null)state.settings.price4=state.settings.price??7.85;
 if(!Array.isArray(state.inventory))state.inventory=[];
 // Preserve any explicitly configured old 4/4 price; otherwise use the actual 4/4 SAB purchase price.
 if(state.settings.price4===undefined||state.settings.price4===null)state.settings.price4=state.settings.price??7.85;
