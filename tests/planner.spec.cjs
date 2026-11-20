@@ -261,3 +261,46 @@ test('all main sections collapse independently and reset to expanded after reloa
   await expect(page.getByRole('button',{name:'+ Add height group'})).toBeVisible();
   expect(await page.evaluate(()=>{const saved=localStorage.getItem('drawer-lumber-planner-v1');return saved!==null&&Object.keys(JSON.parse(saved)).includes('collapsedSections')})).toBe(false);
 });
+
+
+test('glue-up strips respect editable 2-inch minimum and the setting survives reload', async ({ page }) => {
+  const project=structuredClone(sampleProject);
+  project.settings.minGlueWidth=2;
+  project.groups[0].height=11;
+  project.groups[0].items=[{id:2,label:'Vertical cabinet',qty:1,width:24,depth:0,vertical:true}];
+  project.inventory=[
+    {id:'B1',width:11,length:70},
+    {id:'B2',width:6,length:70},
+  ];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('2');
+  const plan=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(plan.assigned).toBe(2);
+  expect(plan.glueUps).toBe(2);
+  for(const cut of plan.boards.flatMap(board=>board.cuts)){
+    for(const lane of cut.lanes)expect(lane.width).toBeGreaterThanOrEqual(2-0.000001);
+  }
+  await page.getByLabel('Minimum glue-up strip width (in)').fill('6');
+  const restricted=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(restricted.assigned).toBe(0);
+  expect(restricted.unassigned).toHaveLength(2);
+  expect(restricted.crosscuts).toBe(0);
+  await page.reload();
+  await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('6');
+});
+
+test('older saved projects default minimum glue-up strip to 2 inches', async ({ page }) => {
+  const project=structuredClone(sampleProject);
+  delete project.settings.minGlueWidth;
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('2');
+  await page.getByLabel('Minimum glue-up strip width (in)').fill('2.5');
+  await page.reload();
+  await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('2.5');
+});
