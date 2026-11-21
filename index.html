@@ -161,7 +161,20 @@ function renderAllocation(){
    svg.append(svgNode('rect',{x:x0,y:y0,width:lengthPx,height:rectH,fill:'#e3cfab',stroke:'#806647','stroke-width':1.5,rx:2}));
    for(let ci=0;ci<board.cuts.length;ci++){
     const cut=board.cuts[ci],left=x0+cut.start*scale,cw=cut.length*scale;
-    const rect=svgNode('rect',{x:left,y:y0,width:cw,height:rectH,fill:ci%2?'#d7bd96':'#ecd9b9',stroke:'#826340','stroke-width':1});
+    const rect=svgNode('rect',{x:left,y:y0,width:cw,height:rectH,fill:ci%2?'#d7bd96':'#ecd9b9',stroke:'#826340','stroke-width':1,
+      class:'board-segment',tabindex:0,role:'button','aria-label':board.label+' full-width crosscut '+(ci+1)+' (first assigned part)'});
+    if(cut.lanes.length){
+      const lane=cut.lanes[0],target={drawerId:lane.drawerId,role:lane.role};
+      const key=cut.id+':'+lane.partId+':'+lane.strip;
+      rect.addEventListener('pointerenter',()=>highlightPart(target));
+      rect.addEventListener('pointerleave',()=>highlightPart(null));
+      rect.addEventListener('focus',()=>highlightPart(target));
+      rect.addEventListener('blur',()=>highlightPart(null));
+      rect.addEventListener('click',()=>selectCut(key,target));
+      rect.addEventListener('keydown',event=>{
+        if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCut(key,target)}
+      });
+    }
     svg.append(rect);
     const totalUsable=board.usableWidth;
     const padding=Math.max(0,(board.width-totalUsable)/2)*rectH/board.width;
@@ -182,7 +195,7 @@ function renderAllocation(){
      region.addEventListener('pointerleave',()=>highlightPart(null));
      region.addEventListener('focus',()=>highlightPart(target));
      region.addEventListener('blur',()=>highlightPart(null));
-     region.addEventListener('click',()=>selectCut(region.getAttribute('data-cut-key'),target));
+     region.addEventListener('click',event=>{event.stopPropagation();selectCut(region.getAttribute('data-cut-key'),target)});
      region.addEventListener('keydown',event=>{
       if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCut(region.getAttribute('data-cut-key'),target)}
      });
