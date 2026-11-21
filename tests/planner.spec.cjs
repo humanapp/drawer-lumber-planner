@@ -410,3 +410,60 @@ test('PDF inventory exporter includes only measured boards, independent of assig
   expect(pdf).not.toContain('(B1)');
   await expect(page.getByLabel('Board B12 width')).toHaveValue('7.25');
 });
+
+
+test('clicking a crosscut pins the matching drawer face until changed or cleared', async ({ page }) => {
+  const project=structuredClone(sampleProject);
+  project.groups[0].items=[{id:2,label:'Kitchen drawer',qty:1,width:18,depth:20}];
+  project.inventory=[{id:'B1',label:'Long maple board',width:12,length:96}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  const cuts=page.locator('#boardLayouts .board-cut');
+  await expect(cuts).toHaveCount(4);
+  const first=cuts.first();
+  const role=await first.getAttribute('aria-label');
+  const firstRole=['front','back','left','right'].find(part=>role.includes(part));
+  await first.click();
+  await page.mouse.move(0,0);
+  await expect(page.locator('.part-face.is-highlighted')).toHaveAttribute('data-part',firstRole);
+  await expect(first).toHaveClass(/is-selected/);
+  await cuts.nth(2).click();
+  await page.mouse.move(0,0);
+  const newRole=(await cuts.nth(2).getAttribute('aria-label'));
+  await expect(page.locator('.part-face.is-highlighted')).toHaveAttribute('data-part',['front','back','left','right'].find(part=>newRole.includes(part)));
+  await expect(first).not.toHaveClass(/is-selected/);
+  await cuts.nth(2).click();
+  await page.mouse.move(0,0);
+  await expect(page.locator('.part-face.is-highlighted')).toHaveCount(0);
+  await expect(cuts.nth(2)).not.toHaveClass(/is-selected/);
+  await first.focus();
+  await page.keyboard.press('Enter');
+  await page.mouse.move(0,0);
+  await expect(first).toHaveClass(/is-selected/);
+  await expect(page.locator('.part-face.is-highlighted')).toHaveAttribute('data-part',firstRole);
+});
+
+test('clicking full-width crosscut background selects its first part and width label is renamed', async ({page})=>{
+  const project=structuredClone(sampleProject);
+  project.groups[0].items=[{id:2,label:'Drawers',qty:1,width:18,depth:20}];
+  project.inventory=[{id:'B1',width:12,length:96}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  await expect(page.getByLabel('Extra panel width (in)')).toHaveValue('0.25');
+  await expect(page.getByLabel('Extra width / strip (in)')).toHaveCount(0);
+  const segment=page.locator('#boardLayouts .board-segment').first();
+  await segment.click({position:{x:2,y:2}});
+  await page.mouse.move(0,0);
+  await expect(page.locator('.part-face.is-highlighted')).toHaveCount(1);
+  await segment.focus();
+  await page.keyboard.press(' ');
+  await page.mouse.move(0,0);
+  await expect(page.locator('.part-face.is-highlighted')).toHaveCount(0);
+  await page.getByLabel('Extra panel width (in)').fill('0.375');
+  await page.reload();
+  await expect(page.getByLabel('Extra panel width (in)')).toHaveValue('0.375');
+});
