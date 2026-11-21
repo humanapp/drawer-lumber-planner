@@ -15,7 +15,7 @@ const sampleProject = {
   ],
 };
 
-test('initial load renders saved drawers and all milling assumptions', async ({ page }) => {
+test('initial load renders saved drawers and solver assumptions', async ({ page }) => {
   await page.addInitScript(({ key, project }) => {
     localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project));
   }, { key, project: sampleProject });
@@ -23,109 +23,72 @@ test('initial load renders saved drawers and all milling assumptions', async ({ 
   await expect(page.getByRole('heading', { name: /Drawer Lumber Planner/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Lumber & milling assumptions' })).toBeVisible();
   for (const field of [
-    'Board width (in)', 'Board length (ft)',
     'Saw kerf (in)', 'Total edge trim (in)', 'Extra length / part (in)',
-    'Extra panel width (in)', '4/4 SAB price ($/BF)', 'Safety margin (%)',
+    'Extra panel width (in)', 'Minimum glue-up strip width (in)',
   ]) await expect(page.getByLabel(field)).toBeVisible();
   await expect(page.getByLabel('Purchased lumber profile')).toHaveCount(0);
   await expect(page.getByLabel('Drawer identifier')).toHaveValue('Upper-left');
   await expect(page.getByLabel('Quantity')).toHaveValue('2');
-  await expect(page.locator('#boards')).not.toHaveText('—');
-  await expect(page.locator('#cutListBody tr').first()).toBeVisible();
+  await expect(page.locator('#boards')).toHaveCount(0);
+  await expect(page.locator('#cutListBody')).toHaveCount(0);
   await expect(page.locator('#previews .preview-card')).toHaveCount(1);
 });
 
-test('4/4 SAB price, assumptions and drawer edits survive reload', async ({ page }) => {
+test('solver assumptions and drawer edits survive reload', async ({ page }) => {
   await page.goto('/');
-  await page.getByLabel('Board width (in)').fill('10');
-  await page.getByLabel('4/4 SAB price ($/BF)').fill('7.85');
+  await page.getByLabel('Saw kerf (in)').fill('0.1');
   await page.getByLabel('Drawer identifier').first().fill('Main bank');
   await page.reload();
   await expect(page.getByLabel('Purchased lumber profile')).toHaveCount(0);
-  await expect(page.getByLabel('Board width (in)')).toHaveValue('10');
-  await expect(page.getByLabel('4/4 SAB price ($/BF)')).toHaveValue('7.85');
+  await expect(page.getByLabel('Saw kerf (in)')).toHaveValue('0.1');
+  await expect(page.getByLabel('Board width (in)')).toHaveCount(0);
+  await expect(page.getByLabel('Board length (ft)')).toHaveCount(0);
+  await expect(page.getByLabel('4/4 SAB price ($/BF)')).toHaveCount(0);
   await expect(page.getByLabel('Drawer identifier').first()).toHaveValue('Main bank');
   await expect(page.getByLabel('Saw kerf (in)')).toBeVisible();
 });
 
 
-test('initial crosscut list uses one blank per 4/4 SAB cut', async ({ page }) => {
-  await page.addInitScript(({ key, project }) => {
-    localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project));
-  }, { key, project: { ...sampleProject, settings: { ...sampleProject.settings, lumberProfile: 's2s4' } } });
-  await page.goto('/');
-  const rows4 = await page.locator('#cutListBody tr').allTextContents();
-  expect(rows4.join(' ')).toContain('24.000');
-  expect(rows4.join(' ')).toContain('26.000');
-  const qty4 = Number(await page.locator('#cutListFoot .numeric').innerText());
-  expect(qty4).toBe(8);
-});
 
-test('legacy saved project retains its old price and drawer labels', async ({ page }) => {
-  const legacy = structuredClone(sampleProject);
-  delete legacy.settings.price4;
-  delete legacy.settings.price8;
-  delete legacy.settings.lumberProfile;
-  delete legacy.settings._profilePricesInitialized;
-  await page.addInitScript(({ key, project }) => localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project)),
-    { key, project: legacy });
-  await page.goto('/');
-  await expect(page.getByLabel('Purchased lumber profile')).toHaveCount(0);
-  await expect(page.getByLabel('4/4 SAB price ($/BF)')).toHaveValue('9');
-  await expect(page.getByLabel('Drawer identifier')).toHaveValue('Upper-left');
-});
 
-test('vertical drawer shows two upright panels, vertical seams, and no side crosscuts', async ({ page }) => {
-  const project = structuredClone(sampleProject);
-  project.settings.lumberProfile = 's2s4';
-  project.groups[0].height = 12;
-  project.groups[0].items[0] = { id: 2, label: 'Trash cubby', qty: 1, width: 24, depth: 0, vertical: true };
-  await page.addInitScript(({ key, project }) => localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project)), { key, project });
+test('vertical drawer uses only upright panels and ignores depth for stock requirements', async ({ page }) => {
+  const project=structuredClone(sampleProject);
+  project.groups[0].height=12;
+  project.groups[0].items[0]={id:2,label:'Trash cubby',qty:1,width:24,depth:0,vertical:true};
+  project.inventory=[{id:'B1',width:7,length:70},{id:'B2',width:7,length:70}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
   await page.goto('/');
-  const card = page.locator('#previews .preview-card');
+  const card=page.locator('#previews .preview-card');
   await expect(page.getByLabel('Vertical drawer: Trash cubby')).toBeChecked();
-  await expect(card).toContainText('24\" upright height');
+  await expect(card).toContainText('24" upright height');
   await expect(card).toContainText('Vertical');
   await expect(card.locator('svg polygon')).toHaveCount(2);
-  const seams = await card.locator('svg line').evaluateAll(els =>
-    els.filter(el => el.hasAttribute('stroke-opacity')).map(el => ({
-      x1: +el.getAttribute('x1'), x2: +el.getAttribute('x2'),
-      y1: +el.getAttribute('y1'), y2: +el.getAttribute('y2')
-    }))
-  );
-  expect(seams.length).toBe(2);
-  for (const seam of seams) {
-    expect(seam.x1).toBeCloseTo(seam.x2);
-    expect(seam.y2).toBeGreaterThan(seam.y1);
-  }
-  await expect(page.locator('#cutListBody')).toContainText('30.000');
-  await expect(page.locator('#cutListBody')).not.toContainText('sides');
-  const qty = Number(await page.locator('#cutListFoot .numeric').innerText());
-  expect(qty).toBe(4);
-  await expect(page.locator('[data-itemid="2"]')).toHaveText('4.0');
-  const costBefore = await page.locator('#cost').innerText();
-  const countBefore = await page.locator('#cutListFoot .numeric').innerText();
-  const rearBefore = await card.locator('svg polygon').first().getAttribute('points');
+  const before=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(before.parts).toHaveLength(2);
+  expect(before.parts.every(p=>['front','back'].includes(p.role))).toBe(true);
+  expect(before.parts.every(p=>p.length===30)).toBe(true);
+  const firstPanel=await card.locator('svg polygon').first().getAttribute('points');
   await page.getByLabel('Depth').fill('38');
-  const rearAfter = await card.locator('svg polygon').first().getAttribute('points');
-  expect(rearAfter).not.toBe(rearBefore);
-  await expect(page.locator('#cost')).toHaveText(costBefore);
-  await expect(page.locator('#cutListFoot .numeric')).toHaveText(countBefore);
-  await expect(card).toContainText('24\" upright height');
+  const after=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(after.parts).toEqual(before.parts);
+  expect(await card.locator('svg polygon').first().getAttribute('points')).not.toBe(firstPanel);
   await page.reload();
   await expect(page.getByLabel('Vertical drawer: Trash cubby')).toBeChecked();
 });
 
-test('vertical checkbox updates cut counts and remains checked after JSON round trip via local storage', async ({ page }) => {
+test('vertical checkbox changes solver demands and persists after reload', async ({ page }) => {
   const project = structuredClone(sampleProject);
   project.groups[0].items[0].qty = 1;
   project.groups[0].items[0].width = 6;
   await page.addInitScript(({ key, project }) => localStorage.getItem(key) || localStorage.setItem(key, JSON.stringify(project)), { key, project });
   await page.goto('/');
-  const before = Number(await page.locator('#cutListFoot .numeric').innerText());
+  const before=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))).parts.length);
   await page.getByLabel('Vertical drawer: Upper-left').check();
-  const after = Number(await page.locator('#cutListFoot .numeric').innerText());
-  expect(after).toBeLessThan(before);
+  const after=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))).parts.length);
+  expect(before).toBe(4);
+  expect(after).toBe(2);
   await page.reload();
   await expect(page.getByLabel('Vertical drawer: Upper-left')).toBeChecked();
 });
@@ -223,27 +186,11 @@ test('actual board assignments suppress legacy assumed glue seams', async ({ pag
   await expect(page.getByRole('button',{name:'Export assigned cuts CSV'})).toBeVisible();
 });
 
-test('obsolete 8/4 setting migrates to 4/4 SAB while preserving drawers and inventory', async ({ page }) => {
-  const project=structuredClone(sampleProject);
-  project.inventory=[{id:'B1',label:'SAB maple',width:12,length:96}];
-  await page.addInitScript(({key,project})=>{
-    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
-  },{key,project});
-  await page.goto('/');
-  await expect(page.getByLabel('Purchased lumber profile')).toHaveCount(0);
-  await expect(page.getByLabel('4/4 SAB price ($/BF)')).toHaveValue('9');
-  await expect(page.getByLabel('Board B1 label')).toHaveValue('SAB maple');
-  await expect(page.getByLabel('Drawer identifier')).toHaveValue('Upper-left');
-  const boards=Number(await page.locator('#boards').innerText());
-  const purchase=Number(await page.locator('#purchase').innerText());
-  expect(purchase).toBeCloseTo(boards*8*8/12,1);
-});
-
 
 test('all main sections collapse independently and reset to expanded after reload', async ({ page }) => {
   await page.goto('/');
   const sections=page.locator('main > details.collapsible');
-  await expect(sections).toHaveCount(9);
+  await expect(sections).toHaveCount(6);
   for(const section of await sections.all())await expect(section).toHaveAttribute('open','');
   const inventory=page.locator('main > details.collapsible').filter({has:page.getByRole('heading',{name:'Measured lumber inventory'})});
   await inventory.locator('summary').click();
@@ -466,4 +413,42 @@ test('clicking full-width crosscut background selects its first part and width l
   await page.getByLabel('Extra panel width (in)').fill('0.375');
   await page.reload();
   await expect(page.getByLabel('Extra panel width (in)')).toHaveValue('0.375');
+});
+
+
+test('removes all generic estimator UI while keeping measured solver and backups', async ({page})=>{
+  const project=structuredClone(sampleProject);
+  project.inventory=[{id:'B1',label:'Measured maple',width:12,length:96}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  for(const heading of ['Material estimate','Yield by height','Initial crosscut list'])
+    await expect(page.getByRole('heading',{name:heading})).toHaveCount(0);
+  for(const field of ['Board width (in)','Board length (ft)','4/4 SAB price ($/BF)','Safety margin (%)'])
+    await expect(page.getByLabel(field)).toHaveCount(0);
+  await expect(page.getByLabel('Drawer identifier')).toHaveValue('Upper-left');
+  await expect(page.getByLabel('Board B1 label')).toHaveValue('Measured maple');
+  await expect(page.locator('#solverSummary')).toContainText('Assigned panels');
+  await expect(page.locator('#previews .preview-card')).toHaveCount(1);
+  await expect(page.getByRole('button',{name:'Save project (.json)'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Export drawer CSV'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Export inventory PDF'})).toBeVisible();
+});
+
+test('legacy estimator settings are ignored when saved project is imported',async ({page})=>{
+  const project=structuredClone(sampleProject);
+  project.inventory=[{id:'B3',label:'Maple',width:6,length:80}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Save project (.json)'}).click()]);
+  const fs=require('node:fs/promises');
+  const exportData=JSON.parse(await fs.readFile(await download.path(),'utf8'));
+  expect(exportData.project.settings).toEqual({
+    kerf:0.125,edgeTrim:0.5,endExtra:6,widthExtra:0.25,minGlueWidth:2
+  });
+  expect(exportData.project.inventory[0].id).toBe('B3');
+  expect(exportData.project.groups[0].items[0].label).toBe('Upper-left');
 });
