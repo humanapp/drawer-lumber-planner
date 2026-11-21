@@ -350,3 +350,63 @@ test('unassigned tint clears when enough boards are added', async ({ page }) => 
   await page.reload();
   await expect(page.locator('#previews .part-face.is-unassigned')).toHaveCount(0);
 });
+
+
+test('exports measured board inventory as a multipage printable PDF', async ({ page }) => {
+  const fs = require('node:fs/promises');
+  const project=structuredClone(sampleProject);
+  project.inventory=Array.from({length:37},(_,i)=>({
+    id:'B'+(i+1),label:i===0?'Wide stock':'B'+(i+1),
+    width:i%2?6.125:12.25,length:96+i
+  }));
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  const [download]=await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button',{name:'Export inventory PDF'}).click()
+  ]);
+  expect(download.suggestedFilename()).toBe('drawer-measured-lumber-inventory.pdf');
+  const bytes=await fs.readFile(await download.path());
+  const pdf=bytes.toString('latin1');
+  expect(pdf.startsWith('%PDF-1.4')).toBe(true);
+  expect(pdf).toContain('%%EOF');
+  expect(pdf).toMatch(/\/Count 3(?:\s|>)/);
+  expect(pdf.match(/\/Type \/Page \/Parent /g)).toHaveLength(3);
+  expect(pdf).toContain('(B1)');
+  expect(pdf).toContain('(B37)');
+  expect(pdf).toContain('(Wide stock)');
+  expect(pdf).toContain('(12.25")');
+  expect(pdf).toContain('(96")');
+  expect(pdf).toContain('(Page 3 / 3)');
+  // Each cross-reference entry must locate its corresponding object.
+  const xrefAt=Number(pdf.match(/startxref\n(\d+)\n%%EOF/)?.[1]);
+  expect(pdf.slice(xrefAt,xrefAt+5)).toBe('xref\n');
+  for(const match of pdf.matchAll(/^(\d{10}) 00000 n /gm)){
+    const offset=Number(match[1]);
+    expect(pdf.slice(offset)).toMatch(/^\d+ 0 obj\n/);
+  }
+});
+
+test('PDF inventory exporter includes only measured boards, independent of assignments', async ({ page }) => {
+  const project=structuredClone(sampleProject);
+  project.inventory=[{id:'B12',label:'My maple board',width:5.875,length:88.5}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  await page.getByLabel('Board B12 width').fill('7.25');
+  const [download]=await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button',{name:'Export inventory PDF'}).click()
+  ]);
+  const fs = require('node:fs/promises');
+  const pdf=(await fs.readFile(await download.path())).toString('latin1');
+  expect(pdf).toContain('(B12)');
+  expect(pdf).toContain('(My maple board)');
+  expect(pdf).toContain('(7.25")');
+  expect(pdf).toContain('(88.5")');
+  expect(pdf).not.toContain('(B1)');
+  await expect(page.getByLabel('Board B12 width')).toHaveValue('7.25');
+});
