@@ -25,7 +25,7 @@ test('initial load renders saved drawers and all milling assumptions', async ({ 
   for (const field of [
     'Board width (in)', 'Board length (ft)',
     'Saw kerf (in)', 'Total edge trim (in)', 'Extra length / part (in)',
-    'Extra width / strip (in)', '4/4 SAB price ($/BF)', 'Safety margin (%)',
+    'Extra panel width (in)', '4/4 SAB price ($/BF)', 'Safety margin (%)',
   ]) await expect(page.getByLabel(field)).toBeVisible();
   await expect(page.getByLabel('Purchased lumber profile')).toHaveCount(0);
   await expect(page.getByLabel('Drawer identifier')).toHaveValue('Upper-left');
