@@ -4,10 +4,7 @@
  const PAGE_W=612,PAGE_H=792,LEFT=44,RIGHT=568,TOP=740,ROWS_PER_PAGE=17,ROW_H=34;
  const ascii=s=>String(s??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7e]/g,'?');
  const pdfText=s=>ascii(s).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
- const fmt=value=>{
-  const n=Number(value);
-  return Number.isFinite(n)?(Math.round(n*1000)/1000).toString():'-';
- };
+ const fmt=value=>root.InchMeasurements.format(value);
  const text=(x,y,size,value,bold=false)=>'BT /'+(bold?'F2':'F1')+' '+size+' Tf 1 0 0 1 '+x+' '+y+' Tm ('+pdfText(value)+') Tj ET\n';
  const line=(x1,y1,x2,y2)=>x1+' '+y1+' m '+x2+' '+y2+' l S\n';
  function makePdf(boards){
@@ -42,8 +39,8 @@
     const label=String(b.label||'');
     const id=String(b.id||'');
     if(label&&label!==id)stream+=text(178,y+13,10,label.length>33?label.slice(0,32)+'...':label);
-    stream+=text(377,y+13,11,fmt(b.width)+'"');
-    stream+=text(451,y+13,11,fmt(b.length)+'"');
+    stream+=text(377,y+13,11,fmt(b.width));
+    stream+=text(451,y+13,11,fmt(b.length));
     stream+='0.35 0.39 0.44 RG\n0.8 w\n540 '+(y+10)+' 13 13 re S\n';
    }
    if(!entries.length)stream+='0.45 0.48 0.52 rg\n'+text(LEFT+6,headerY-45,11,'No measured boards entered.');
