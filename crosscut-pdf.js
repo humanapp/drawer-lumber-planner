@@ -19,7 +19,7 @@ function makePdf(plan){
   y=TOP-53;
  }
  function boardHeader(board,continued){
-  stream+='0.13 0.18 0.23 rg\n'+text(L,y,12,board.id+'  '+(board.label===board.id?'':board.label+'  ')+number(board.width)+'" W x '+number(board.length)+'" L'+(continued?'  (continued)':''),true);
+  stream+='0.13 0.18 0.23 rg\n'+text(L,y,12,board.id+'  '+(board.label===board.id?'':board.label+'  ')+number(board.width)+' W x '+number(board.length)+' L'+(continued?'  (continued)':''),true);
   y-=16;
  }
  function drawBoard(board){
@@ -42,7 +42,7 @@ function makePdf(plan){
    }
    if(w>31)stream+='0.17 0.14 0.1 rg\n'+text(x+2,base+height+5,7,'C'+(i+1));
   }
-  stream+='0.34 0.39 0.43 rg\n'+text(L,base-13,8,'Uncut tail: '+number(board.available)+'"    Usable width after edge trim: '+number(board.usableWidth));
+  stream+='0.34 0.39 0.43 rg\n'+text(L,base-13,8,'Uncut tail: '+number(board.available)+'    Usable width after edge trim: '+number(board.usableWidth));
   y=base-26;
  }
  function tableHeader(){
@@ -86,7 +86,7 @@ function makePdf(plan){
   y-=17;
   for(const part of plan.unassigned){
    if(y-15<BOTTOM)newPage();
-   stream+='0.23 0.20 0.20 rg\n'+text(L+4,y,9,part.coordinate+'  '+number(part.width)+'" W x '+number(part.length)+'" L   '+part.drawerLabel);
+   stream+='0.23 0.20 0.20 rg\n'+text(L+4,y,9,part.coordinate+'  '+number(part.width)+' W x '+number(part.length)+' L   '+part.drawerLabel);
    y-=14;
   }
  }
