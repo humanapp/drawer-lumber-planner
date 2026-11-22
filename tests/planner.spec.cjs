@@ -324,7 +324,7 @@ test('exports measured board inventory as a multipage printable PDF', async ({ p
   expect(pdf).toContain('(B1)');
   expect(pdf).toContain('(B37)');
   expect(pdf).toContain('(Wide stock)');
-  expect(pdf).toContain('(12.25")');
+  expect(pdf).toContain('(12-1/4")');
   expect(pdf).toContain('(96")');
   expect(pdf).toContain('(Page 3 / 3)');
   // Each cross-reference entry must locate its corresponding object.
@@ -352,8 +352,8 @@ test('PDF inventory exporter includes only measured boards, independent of assig
   const pdf=(await fs.readFile(await download.path())).toString('latin1');
   expect(pdf).toContain('(B12)');
   expect(pdf).toContain('(My maple board)');
-  expect(pdf).toContain('(7.25")');
-  expect(pdf).toContain('(88.5")');
+  expect(pdf).toContain('(7-1/4")');
+  expect(pdf).toContain('(88-1/2")');
   expect(pdf).not.toContain('(B1)');
   await expect(page.getByLabel('Board B12 width')).toHaveValue('7.25');
 });
@@ -501,8 +501,8 @@ test('mixed-length rip lanes retain actual lengths and CSV trim instructions', a
   ]);
   const csv=await fs.readFile(await download.path(),'utf8');
   expect(csv).toContain('Rip Length / Trim To (in)');
-  expect(csv).toContain(',24.000,5.250,');
-  expect(csv).toContain(',26.000,6.250,');
+  expect(csv).toContain(',\"24\"\"\"\",\"5-1/4\"\"\"\",');
+  expect(csv).toContain(',\"26\"\"\"\",\"6-1/4\"\"\"\",');
 });
 
 test('optimizer is deterministic and never commits overlapping crosscuts or partial panels', async ({page})=>{
@@ -668,7 +668,7 @@ test('crosscut assignment view shows strip width × length and exports dimension
  await expect(page.getByRole('button',{name:'Export crosscut PDF'})).toBeVisible();
  const dimensionLabels=page.locator('#boardLayouts .board-width-label');
  const expectedDimensions=plan.boards.flatMap(board=>board.cuts.flatMap(cut=>cut.lanes.map(lane=>
-  lane.width.toFixed(2)+' × '+lane.length.toFixed(2))));
+  formatInches(lane.width)+' × '+formatInches(lane.length))));
  await expect(dimensionLabels).toHaveCount(expectedDimensions.length);
  expect(await dimensionLabels.allTextContents()).toEqual(expectedDimensions);
  const [download]=await Promise.all([
@@ -684,11 +684,11 @@ test('crosscut assignment view shows strip width × length and exports dimension
  expect(pdf).toContain('(STRIP WIDTH)');
  expect(pdf).toContain('(CROSSCUT LENGTH)');
  expect(pdf).toContain('(TRIM-TO LENGTH)');
- expect(pdf).toContain('(B1  Maple Twelve  12.00" W x 96.00" L)');
+ expect(pdf).toContain('(B1  Maple Twelve  12" W x 96" L)');
  for(const lane of plan.boards[0].cuts.flatMap(c=>c.lanes)){
   expect(pdf).toContain('('+lane.coordinate+')');
-  expect(pdf).toContain('('+lane.width.toFixed(2)+'")');
-  expect(pdf).toContain('('+lane.length.toFixed(2)+'")');
+  expect(pdf).toContain('('+formatInches(lane.width)+')');
+  expect(pdf).toContain('('+formatInches(lane.length)+')');
  }
  const xref=Number(pdf.match(/startxref\n(\d+)\n%%EOF/)?.[1]);
  expect(pdf.slice(xref,xref+5)).toBe('xref\n');
@@ -712,7 +712,7 @@ test('crosscut PDF paginates many boards and reports unassigned panel coordinate
  const pages=Number(pdf.match(/\/Type \/Pages \/Kids \[[^\]]+\] \/Count (\d+)/)?.[1]);
  expect(pages).toBeGreaterThan(1);
  expect((pdf.match(/\/Type \/Page \/Parent /g)||[]).length).toBe(pages);
- expect(pdf).toContain('(B18  Maple 18  6.00" W x 38.00" L)');
+ expect(pdf).toContain('(B18  Maple 18  6" W x 38" L)');
  if(plan.unassigned.length){
   expect(pdf).toContain('UNASSIGNED PANELS');
   for(const part of plan.unassigned)expect(pdf).toContain(part.coordinate);
