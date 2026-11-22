@@ -620,7 +620,7 @@ test('coordinate text appears over every assigned rip lane and matches cut CSV',
 test('glued panel strips show suffixes and unassigned coordinates remain visible',async ({page})=>{
   const project=structuredClone(sampleProject);
   project.groups=[{id:1,height:11,items:[{id:2,label:'Tall drawers',qty:1,width:18,depth:0,vertical:true}]}];
-  project.inventory=[{id:'B1',width:6,length:70},{id:'B2',width:6,length:70}];
+  project.inventory=[{id:'B1',width:6.25,length:70},{id:'B2',width:6.25,length:70}];
   await page.addInitScript(({key,project})=>{
     if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
   },{key,project});
