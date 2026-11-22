@@ -92,6 +92,15 @@ function renderInventoryTotal(){
  const bf=boards.reduce((total,b)=>total+num(b.width)*num(b.length)/144,0);
  $('inventoryTotal').textContent=boards.length+' measured boards · '+bf.toFixed(2)+' nominal 4/4 BF from measured dimensions (not supplier tally)';
 }
+let cachedPlanKey=null,cachedPlan=null;
+function getPlan(){
+ const key=JSON.stringify([state.settings,state.groups,state.inventory]);
+ if(key!==cachedPlanKey){
+  cachedPlan=window.DrawerSolver.solve(state);
+  cachedPlanKey=key;
+ }
+ return cachedPlan;
+}
 let hoveredPart=null,selectedPart=null,selectedCutKey=null;
 function highlightPart(part){
  hoveredPart=part;
@@ -124,7 +133,7 @@ function markFace(element,item,role){
  return element;
 }
 function renderAllocation(){
- const result=window.DrawerSolver.solve(state);
+ const result=getPlan();
  const host=$('boardLayouts'),summary=$('solverSummary'),missing=$('solverUnassigned');
  host.replaceChildren();summary.replaceChildren();missing.replaceChildren();
  hoveredPart=null;selectedPart=null;selectedCutKey=null;
@@ -235,7 +244,7 @@ function svgNode(tag,attrs,content){
 function renderPreviews(){
  const host=$('previews');host.replaceChildren();
  const inventoryMode=Array.isArray(state.inventory)&&state.inventory.length>0;
- const plan=inventoryMode?window.DrawerSolver.solve(state):null;
+ const plan=inventoryMode?getPlan():null;
  const assigned=plan?.assignments||null;
  const unassignedByFace=new Map();
  if(plan)for(const part of plan.unassigned){
@@ -346,7 +355,7 @@ $('saveProject').onclick=()=>{download('drawer-lumber-project.json',JSON.stringi
 $('loadProject').onclick=()=>$('projectFile').click();
 $('projectFile').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{const raw=await f.text(),newState=f.name.toLowerCase().endsWith('.csv')?fromCSV(raw):fromJSON(raw);if(!confirm('Replace the current drawer set with the imported project?'))return;state=newState;nextID=Math.max(10,...state.groups.flatMap(g=>[g.id,...g.items.map(x=>x.id)]))+1;nextBoardID=Math.max(0,...state.inventory.map(b=>Number(String(b.id||'').match(/^B(\d+)$/)?.[1])||0))+1;save();render();$('status').textContent='Project imported and autosaved.'}catch(err){$('status').textContent='Import failed: '+err.message}finally{e.target.value=''}};
 $('exportMeasured').onclick=()=>{
- const plan=window.DrawerSolver.solve(state);
+ const plan=getPlan();
  const lines=['Board ID,Board Label,Cut Number,Start (in),Crosscut Length (in),Kerf (in),Drawer Label,Drawer Copy,Part,Rip Length / Trim To (in),Proposed Rip Width (in),Glue Strip'];
  for(const b of plan.boards){
   for(let i=0;i<b.cuts.length;i++){
