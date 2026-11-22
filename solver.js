@@ -71,6 +71,36 @@
   });
   return result;
  }
+ // Bounded subset search for a crosscut's rip lanes. Unlike greedy first-fit,
+ // this keeps competing combinations alive so a narrow early choice does not
+ // block a tighter combination encountered later. Every candidate is a whole
+ // panel and all joins include saw kerf.
+ function packedCandidates(pool,anchor,capacity,kerf,length,mode){
+  const limit=48;
+  const rank=state=>state.parts.length*1000+state.area/Math.max(1,length)+state.used*.01;
+  let beam=[{parts:[anchor],used:anchor.width,area:anchor.width*anchor.length}];
+  const options=pool.filter(p=>p!==anchor);
+  // Alternating sort orders help preserve different subsets within the beam.
+  options.sort((a,b)=>{
+   if(mode%4===0)return b.width-a.width||b.length-a.length||a.id.localeCompare(b.id);
+   if(mode%4===1)return a.width-b.width||b.length-a.length||a.id.localeCompare(b.id);
+   if(mode%4===2)return b.width*b.length-a.width*a.length||a.id.localeCompare(b.id);
+   return b.length-a.length||a.width-b.width||a.id.localeCompare(b.id);
+  });
+  for(const part of options){
+   const expanded=beam.slice();
+   for(const state of beam){
+    const used=state.used+kerf+part.width;
+    if(used>capacity+EPS)continue;
+    expanded.push({parts:[...state.parts,part],used,area:state.area+part.width*part.length});
+   }
+   expanded.sort((a,b)=>rank(b)-rank(a)||a.used-b.used);
+   // Always retain the anchor-only option, even when the beam is saturated.
+   beam=expanded.slice(0,limit-1);
+   if(!beam.some(state=>state.parts.length===1))beam.push({parts:[anchor],used:anchor.width,area:anchor.width*anchor.length});
+  }
+  return beam;
+ }
  // Select the best mixed-width packing for one candidate crosscut length.
  // A strip may be shorter than the full-width blank, but never longer.
  function pattern(board,pending,kerf,mode){
@@ -94,28 +124,46 @@
     if(order===2)return b.width*b.length-a.width*a.length||b.length-a.length||a.id.localeCompare(b.id);
     return a.width-b.width||b.length-a.length||a.id.localeCompare(b.id);
    });
-   // Require a panel of the candidate length. Otherwise we would overcut
-   // all rip lanes and could improve the pattern by shortening its crosscut.
-   const first=pool.find(p=>Math.abs(p.length-length)<=EPS);
-   if(!first)continue;
-   const selected=[first];
-   let used=first.width;
-   for(const p of pool){
-    if(p===first)continue;
-    const next=used+kerf+p.width;
-    if(next>board.usableWidth+EPS)continue;
-    selected.push(p);used=next;
+   // Anchor the crosscut at its longest lane to avoid unnecessary overcut.
+   // Search several anchors for optimized modes; retain first-fit modes as a
+   // baseline when comparing complete plans.
+   const eligible=pool.filter(p=>Math.abs(p.length-length)<=EPS);
+   if(!eligible.length)continue;
+   const anchors=mode<8?[eligible[0]]:[];
+   if(mode>=8){
+    const choices=[...eligible].sort((a,b)=>b.width-a.width||a.id.localeCompare(b.id));
+    const seen=new Set();
+    for(const p of [...choices,...choices.slice().reverse(),...eligible]){
+     const key=p.width.toFixed(5)+':'+p.length.toFixed(5);
+     if(seen.has(key))continue;
+     seen.add(key);anchors.push(p);
+     if(anchors.length>=6)break;
+    }
    }
-   // Counts, wood waste, and width utilization compete within a search run;
-   // the final comparison evaluates the complete plan lexicographically.
-   const area=selected.reduce((v,p)=>v+p.width*p.length,0);
-   const waste=Math.max(0,board.usableWidth*length-area);
-   const utilization=area/(board.usableWidth*length);
-   const score=selected.length*(100+(mode%3)*9)+utilization*24-
-     waste/(board.usableWidth*length)*9-
-     (length/board.length)*(mode%2===0?2:8);
+   for(const first of anchors){
+    let candidates;
+    if(mode>=8)candidates=packedCandidates(pool,first,board.usableWidth,kerf,length,mode);
+    else{
+     const selected=[first];let used=first.width;
+     for(const p of pool){
+      if(p===first)continue;
+      const next=used+kerf+p.width;
+      if(next>board.usableWidth+EPS)continue;
+      selected.push(p);used=next;
+     }
+     candidates=[{parts:selected,used,area:selected.reduce((v,p)=>v+p.width*p.length,0)}];
+    }
+    for(const selected of candidates){
+     const area=selected.area;
+     const waste=Math.max(0,board.usableWidth*length-area);
+     const utilization=area/(board.usableWidth*length);
+     const score=selected.parts.length*(100+(mode%3)*9)+utilization*24-
+       waste/(board.usableWidth*length)*9-
+       (length/board.length)*(mode%2===0?2:8);
    if(score>bestScore+EPS){
-    bestScore=score;best={length,parts:selected,used,area,waste};
+    bestScore=score;best={length,parts:selected.parts,used:selected.used,area,waste};
+   }
+    }
    }
   }
   return best;
@@ -125,7 +173,7 @@
    while(board.available>EPS && pending.size){
     const options=[...pending.values()].filter(p=>p.width<=board.usableWidth+EPS);
     if(!options.length)break;
-    const option=pattern(board,options,kerf,Math.floor(mode/3));
+    const option=pattern(board,options,kerf,mode<24?Math.floor(mode/3):8+(mode-24));
     if(!option)break;
     let offset=0;
     const lanes=option.parts.map(p=>{
@@ -226,7 +274,8 @@
   let best=null;
   // Independent strategies: board order, panel order, and length/width
   // pattern selection. Compare COMPLETE outcomes rather than first-fit moves.
-  for(let mode=0;mode<24;mode++){
+  // Preserve the original 24 first-fit strategies, then try bounded search.
+  for(let mode=0;mode<32;mode++){
    const plan=candidate(project,parts,settings,mode);
    if(better(plan,best))best=plan;
   }
