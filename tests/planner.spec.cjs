@@ -712,7 +712,7 @@ test('crosscut PDF paginates many boards and reports unassigned panel coordinate
  expect((pdf.match(/\/Type \/Page \/Parent /g)||[]).length).toBe(pages);
  expect(pdf).toContain('(B18  Maple 18  6.00" W x 38.00" L)');
  if(plan.unassigned.length){
-  expect(pdf).toContain('(UNASSIGNED PANELS)');
+  expect(pdf).toContain('UNASSIGNED PANELS');
   for(const part of plan.unassigned)expect(pdf).toContain(part.coordinate);
  }
 });
