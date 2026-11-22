@@ -325,6 +325,7 @@ test('exports measured board inventory as a multipage printable PDF', async ({ p
   expect(pdf).toContain('(B37)');
   expect(pdf).toContain('(Wide stock)');
   expect(pdf).toContain('(12-1/4")');
+  expect(pdf).not.toContain('(12.25")');
   expect(pdf).toContain('(96")');
   expect(pdf).toContain('(Page 3 / 3)');
   // Each cross-reference entry must locate its corresponding object.
@@ -691,6 +692,8 @@ test('crosscut assignment view shows strip width × length and exports dimension
  expect(pdf).toContain('(CROSSCUT LENGTH)');
  expect(pdf).toContain('(TRIM-TO LENGTH)');
  expect(pdf).toContain('(B1  Maple Twelve  12" W x 96" L)');
+ expect(pdf).toContain('(5-1/4")');
+ expect(pdf).not.toContain('(5.25")');
  for(const lane of plan.boards[0].cuts.flatMap(c=>c.lanes)){
   expect(pdf).toContain('('+lane.coordinate+')');
   expect(pdf).toContain('('+formatInches(lane.width)+')');
@@ -722,5 +725,14 @@ test('crosscut PDF paginates many boards and reports unassigned panel coordinate
  if(plan.unassigned.length){
   expect(pdf).toContain('UNASSIGNED PANELS');
   for(const part of plan.unassigned)expect(pdf).toContain(part.coordinate);
+ }
+});
+
+test('fraction formatter rounds to sixteenths and exporter scripts are versioned',async({page})=>{
+ await page.goto('/');
+ const formats=await page.evaluate(()=>[12.5,5.25,6.125,12,5.3125,7.03,0.03].map(window.InchMeasurements.format));
+ expect(formats).toEqual(['12-1/2"','5-1/4"','6-1/8"','12"','5-5/16"','7"','0"']);
+ for(const asset of ['measurements.js','inventory-pdf.js','crosscut-pdf.js']){
+  await expect(page.locator('script[src^="'+asset+'?"]')).toHaveCount(1);
  }
 });
