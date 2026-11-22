@@ -18,11 +18,11 @@
 <section class="panel"><h2>Project data &amp; backups</h2><p class="note">Data autosaves in this browser on this site. Before switching from the old downloaded HTML version, export its JSON project and import it here. Keep occasional JSON backups.</p>
 <div class="buttons"><button id="saveProject" class="primary">Save project (.json)</button><button id="loadProject">Load project (.json or CSV)</button><input id="projectFile" type="file" accept=".json,.csv" hidden><button id="export">Export drawer CSV</button><button id="reset">Reset examples</button></div><p id="status" class="note" role="status"></p></section>
 <p class="note">Plans four sides per drawer (two upright panels for Vertical), excluding applied drawer fronts and bottoms. Board assignments are suggestions and do not account for grain, defects, or internal stress.</p>
-</main><script src="solver.js"></script><script src="inventory-pdf.js"></script><script src="crosscut-pdf.js"></script><script>
+</main><script src="measurements.js"></script><script src="solver.js"></script><script src="inventory-pdf.js"></script><script src="crosscut-pdf.js"></script><script>
 (function(){'use strict';
 const KEY='drawer-lumber-planner-v1';
 const defaults=()=>({inventory:[],settings:{kerf:.125,edgeTrim:.5,endExtra:6,widthExtra:.25,minGlueWidth:2},groups:[{id:1,height:5,items:[{id:2,qty:8,width:18,depth:20}]},{id:3,height:7,items:[{id:4,qty:8,width:18,depth:20}]},{id:5,height:11,items:[{id:6,qty:8,width:18,depth:20}]}]});
-const $=id=>document.getElementById(id),num=v=>Math.max(0,Number(v)||0),fmt=x=>Number.isFinite(x)?x.toFixed(1):'—';
+const $=id=>document.getElementById(id),num=v=>Math.max(0,Number(v)||0),fmt=window.InchMeasurements.format;
 let state;try{state=JSON.parse(localStorage.getItem(KEY))||defaults();if(!Array.isArray(state.groups)||!state.settings)throw Error()}catch(e){state=defaults()}
 const solverSettings = settings => {
  const base=defaults().settings,source=settings||{};
@@ -196,8 +196,8 @@ function renderAllocation(){
   const scale=790/maxLength;
   for(const board of result.boards){
    const card=document.createElement('div');card.className='board-layout';
-   const name=document.createElement('strong');name.textContent=board.label+' — '+board.width.toFixed(2)+'" × '+board.length.toFixed(2)+'"';
-   const note=document.createElement('small');note.className='muted';note.textContent=' '+board.cuts.length+' crosscuts · '+board.available.toFixed(2)+'" uncut tail';
+   const name=document.createElement('strong');name.textContent=board.label+' — '+fmt(board.width)+' × '+fmt(board.length);
+   const note=document.createElement('small');note.className='muted';note.textContent=' '+board.cuts.length+' crosscuts · '+fmt(board.available)+' uncut tail';
    const svgHeight=Math.max(48,board.width*7+25),rectH=Math.max(24,board.width*7);
    const svg=svgNode('svg',{viewBox:'0 0 840 '+svgHeight,role:'group','aria-label':'Proposed cuts for '+board.label});
    const x0=12,y0=12,lengthPx=board.length*scale;
@@ -232,7 +232,7 @@ function renderAllocation(){
        'data-coordinate':lane.coordinate,
        'aria-label':board.label+' cut '+(ci+1)+': '+lane.coordinate+' · '+lane.drawerLabel+' #'+lane.copy+' '+lane.role+
           (lane.strips>1?' glue strip '+lane.strip+'/'+lane.strips:'')});
-     const title=svgNode('title',{},lane.coordinate+' · '+lane.drawerLabel+' #'+lane.copy+' '+lane.role+' · '+lane.length.toFixed(2)+'" rip length × '+lane.width.toFixed(2)+'" width (full-width crosscut '+cut.length.toFixed(2)+'")'+(lane.strips>1?' · strip '+lane.strip+'/'+lane.strips:''));
+     const title=svgNode('title',{},lane.coordinate+' · '+lane.drawerLabel+' #'+lane.copy+' '+lane.role+' · '+fmt(lane.length)+' rip length × '+fmt(lane.width)+' width (full-width crosscut '+fmt(cut.length)+')'+(lane.strips>1?' · strip '+lane.strip+'/'+lane.strips:''));
      region.append(title);
      const target={drawerId:lane.drawerId,role:lane.role};
      region.addEventListener('pointerenter',()=>highlightPart(target));
@@ -250,7 +250,7 @@ function renderAllocation(){
       'font-size':textSize,class:'board-coordinate','data-coordinate':lane.coordinate
      },lane.coordinate));
      if(cw>=38&&laneH>=18){
-      const dimensions=lane.width.toFixed(2)+' × '+lane.length.toFixed(2);
+      const dimensions=fmt(lane.width)+' × '+fmt(lane.length);
       const dimensionSize=Math.min(10,Math.max(7,(cw-6)/(dimensions.length*.58)));
       svg.append(svgNode('text',{
        x:left+cw/2,y:laneY+laneH/2+6,'text-anchor':'middle','dominant-baseline':'middle',
@@ -260,7 +260,7 @@ function renderAllocation(){
     }
     if(cw>37){
      const first=cut.lanes[0];
-     const text=svgNode('text',{x:left+4,y:y0+rectH+13,'font-size':10,fill:'var(--text)'},'C'+(ci+1)+' · '+cut.length.toFixed(2)+'" L');
+     const text=svgNode('text',{x:left+4,y:y0+rectH+13,'font-size':10,fill:'var(--text)'},'C'+(ci+1)+' · '+fmt(cut.length)+' L');
      svg.append(text);
     }
    }
@@ -276,7 +276,7 @@ function renderAllocation(){
   const list=document.createElement('ul');list.className='solver-unassigned';
   const groups=new Map();
   for(const p of result.unassigned){
-   const key=p.coordinate+' · '+p.drawerLabel+' — '+p.role+' · '+p.length.toFixed(2)+'" × '+p.width.toFixed(2)+'"';
+   const key=p.coordinate+' · '+p.drawerLabel+' — '+p.role+' · '+fmt(p.length)+' × '+fmt(p.width);
    groups.set(key,(groups.get(key)||0)+1);
   }
   for(const [name,count] of groups){const li=document.createElement('li');li.textContent=count+' × '+name;list.append(li)}
@@ -324,7 +324,7 @@ function renderPreviews(){
   const card=document.createElement('div');card.className='preview-card';
   const heading=document.createElement('strong');heading.textContent=item.code+' · '+(item.label?.trim()||'Drawer '+count);
   const subtitle=document.createElement('small');subtitle.className='muted';
-  subtitle.textContent=vertical?(h+'" panel width × '+w+'" upright height · Qty '+qty+' · Vertical'):(w+'" W × '+d+'" D × '+h+'" H · Qty '+qty);
+  subtitle.textContent=vertical?(fmt(h)+' panel width × '+fmt(w)+' upright height · Qty '+qty+' · Vertical'):(fmt(w)+' W × '+fmt(d)+' D × '+fmt(h)+' H · Qty '+qty);
   const svg=svgNode('svg',{viewBox:'0 0 255 160',role:'img','aria-label':vertical?('Two upright panels, '+h+' inches wide, '+w+' inches tall'):('Open-top drawer box '+w+' inches wide, '+d+' inches deep, '+h+' inches tall')});
   const line={stroke:'#745b41','stroke-width':1.4,'stroke-linejoin':'round'};
   const poly=pts=>pts.map(p=>p.map(n=>n.toFixed(2)).join(',')).join(' ');
@@ -416,13 +416,13 @@ $('exportMeasured').onclick=()=>{
  for(const b of plan.boards){
   for(let i=0;i<b.cuts.length;i++){
    const c=b.cuts[i];
-   for(const lane of c.lanes)lines.push([csvEscape(b.id),csvEscape(b.label),i+1,c.start.toFixed(3),c.length.toFixed(3),c.kerf.toFixed(3),csvEscape(lane.drawerLabel),lane.copy,csvEscape(lane.role),csvEscape(lane.coordinate),lane.length.toFixed(3),lane.width.toFixed(3),lane.strips>1?lane.strip+'/'+lane.strips:'single'].join(','));
+   for(const lane of c.lanes)lines.push([csvEscape(b.id),csvEscape(b.label),i+1,csvEscape(fmt(c.start)),csvEscape(fmt(c.length)),csvEscape(fmt(c.kerf)),csvEscape(lane.drawerLabel),lane.copy,csvEscape(lane.role),csvEscape(lane.coordinate),csvEscape(fmt(lane.length)),csvEscape(fmt(lane.width)),lane.strips>1?lane.strip+'/'+lane.strips:'single'].join(','));
   }
  }
  lines.push('');
  lines.push('Unassigned Panels');
  lines.push('Drawer Label,Copy,Part,Panel Coordinate,Required Length (in),Required Width (in)');
- for(const p of plan.unassigned)lines.push([csvEscape(p.drawerLabel),p.copy,csvEscape(p.role),csvEscape(p.coordinate),p.length.toFixed(3),p.width.toFixed(3)].join(','));
+ for(const p of plan.unassigned)lines.push([csvEscape(p.drawerLabel),p.copy,csvEscape(p.role),csvEscape(p.coordinate),csvEscape(fmt(p.length)),csvEscape(fmt(p.width))].join(','));
  download('drawer-measured-crosscut-plan.csv',lines.join('\r\n'),'text/csv');
 };
 $('exportInventoryPdf').onclick=()=>downloadBlob('drawer-measured-lumber-inventory.pdf',window.InventoryPdf.makePdf(state.inventory));
