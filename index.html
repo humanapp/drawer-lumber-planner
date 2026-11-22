@@ -229,9 +229,10 @@ function renderAllocation(){
        fill:'#d49e62','fill-opacity':0.18,stroke:'#99744c','stroke-width':0.65,
        'stroke-dasharray':'3 2',class:'board-cut',tabindex:0,role:'button',
        'data-cut-key':cut.id+':'+lane.partId+':'+lane.strip,
-       'aria-label':board.label+' cut '+(ci+1)+': '+lane.drawerLabel+' #'+lane.copy+' '+lane.role+
+       'data-coordinate':lane.coordinate,
+       'aria-label':board.label+' cut '+(ci+1)+': '+lane.coordinate+' · '+lane.drawerLabel+' #'+lane.copy+' '+lane.role+
           (lane.strips>1?' glue strip '+lane.strip+'/'+lane.strips:'')});
-     const title=svgNode('title',{},lane.drawerLabel+' #'+lane.copy+' '+lane.role+' · '+lane.length.toFixed(2)+'" rip length × '+lane.width.toFixed(2)+'" width (full-width crosscut '+cut.length.toFixed(2)+'")'+(lane.strips>1?' · strip '+lane.strip+'/'+lane.strips:''));
+     const title=svgNode('title',{},lane.coordinate+' · '+lane.drawerLabel+' #'+lane.copy+' '+lane.role+' · '+lane.length.toFixed(2)+'" rip length × '+lane.width.toFixed(2)+'" width (full-width crosscut '+cut.length.toFixed(2)+'")'+(lane.strips>1?' · strip '+lane.strip+'/'+lane.strips:''));
      region.append(title);
      const target={drawerId:lane.drawerId,role:lane.role};
      region.addEventListener('pointerenter',()=>highlightPart(target));
@@ -243,10 +244,15 @@ function renderAllocation(){
       if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCut(region.getAttribute('data-cut-key'),target)}
      });
      svg.append(region);
+     const textSize=Math.min(12,Math.max(8,Math.min(laneH-2,(cw-5)/(lane.coordinate.length*.64))));
+     svg.append(svgNode('text',{
+      x:left+cw/2,y:laneY+laneH/2,'text-anchor':'middle','dominant-baseline':'middle',
+      'font-size':textSize,class:'board-coordinate','data-coordinate':lane.coordinate
+     },lane.coordinate));
     }
     if(cw>37){
      const first=cut.lanes[0];
-     const text=svgNode('text',{x:left+4,y:y0+rectH+13,'font-size':10,fill:'var(--text)'},first.drawerLabel.slice(0,17)+(cut.lanes.length>1?' ×'+cut.lanes.length:''));
+     const text=svgNode('text',{x:left+4,y:y0+rectH+13,'font-size':10,fill:'var(--text)'},first.coordinate+(cut.lanes.length>1?' +'+(cut.lanes.length-1):''));
      svg.append(text);
     }
    }
@@ -262,7 +268,7 @@ function renderAllocation(){
   const list=document.createElement('ul');list.className='solver-unassigned';
   const groups=new Map();
   for(const p of result.unassigned){
-   const key=p.drawerLabel+' — '+p.role+' · '+p.length.toFixed(2)+'" × '+p.width.toFixed(2)+'"';
+   const key=p.coordinate+' · '+p.drawerLabel+' — '+p.role+' · '+p.length.toFixed(2)+'" × '+p.width.toFixed(2)+'"';
    groups.set(key,(groups.get(key)||0)+1);
   }
   for(const [name,count] of groups){const li=document.createElement('li');li.textContent=count+' × '+name;list.append(li)}
@@ -397,17 +403,17 @@ $('loadProject').onclick=()=>$('projectFile').click();
 $('projectFile').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{const raw=await f.text(),newState=f.name.toLowerCase().endsWith('.csv')?fromCSV(raw):fromJSON(raw);if(!confirm('Replace the current drawer set with the imported project?'))return;state=ensureDrawerCodes(newState);nextID=Math.max(10,...state.groups.flatMap(g=>[g.id,...g.items.map(x=>x.id)]))+1;nextBoardID=Math.max(0,...state.inventory.map(b=>Number(String(b.id||'').match(/^B(\d+)$/)?.[1])||0))+1;save();render();$('status').textContent='Project imported and autosaved.'}catch(err){$('status').textContent='Import failed: '+err.message}finally{e.target.value=''}};
 $('exportMeasured').onclick=()=>{
  const plan=getPlan();
- const lines=['Board ID,Board Label,Cut Number,Start (in),Crosscut Length (in),Kerf (in),Drawer Label,Drawer Copy,Part,Rip Length / Trim To (in),Proposed Rip Width (in),Glue Strip'];
+ const lines=['Board ID,Board Label,Cut Number,Start (in),Crosscut Length (in),Kerf (in),Drawer Label,Drawer Copy,Part,Panel Coordinate,Rip Length / Trim To (in),Proposed Rip Width (in),Glue Strip'];
  for(const b of plan.boards){
   for(let i=0;i<b.cuts.length;i++){
    const c=b.cuts[i];
-   for(const lane of c.lanes)lines.push([csvEscape(b.id),csvEscape(b.label),i+1,c.start.toFixed(3),c.length.toFixed(3),c.kerf.toFixed(3),csvEscape(lane.drawerLabel),lane.copy,csvEscape(lane.role),lane.length.toFixed(3),lane.width.toFixed(3),lane.strips>1?lane.strip+'/'+lane.strips:'single'].join(','));
+   for(const lane of c.lanes)lines.push([csvEscape(b.id),csvEscape(b.label),i+1,c.start.toFixed(3),c.length.toFixed(3),c.kerf.toFixed(3),csvEscape(lane.drawerLabel),lane.copy,csvEscape(lane.role),csvEscape(lane.coordinate),lane.length.toFixed(3),lane.width.toFixed(3),lane.strips>1?lane.strip+'/'+lane.strips:'single'].join(','));
   }
  }
  lines.push('');
  lines.push('Unassigned Panels');
- lines.push('Drawer Label,Copy,Part,Required Length (in),Required Width (in)');
- for(const p of plan.unassigned)lines.push([csvEscape(p.drawerLabel),p.copy,csvEscape(p.role),p.length.toFixed(3),p.width.toFixed(3)].join(','));
+ lines.push('Drawer Label,Copy,Part,Panel Coordinate,Required Length (in),Required Width (in)');
+ for(const p of plan.unassigned)lines.push([csvEscape(p.drawerLabel),p.copy,csvEscape(p.role),csvEscape(p.coordinate),p.length.toFixed(3),p.width.toFixed(3)].join(','));
  download('drawer-measured-crosscut-plan.csv',lines.join('\r\n'),'text/csv');
 };
 $('exportInventoryPdf').onclick=()=>downloadBlob('drawer-measured-lumber-inventory.pdf',window.InventoryPdf.makePdf(state.inventory));
