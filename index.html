@@ -249,10 +249,14 @@ function renderAllocation(){
       x:left+cw/2,y:laneY+laneH/2-4,'text-anchor':'middle','dominant-baseline':'middle',
       'font-size':textSize,class:'board-coordinate','data-coordinate':lane.coordinate
      },lane.coordinate));
-     if(cw>=38&&laneH>=18)svg.append(svgNode('text',{
-      x:left+cw/2,y:laneY+laneH/2+6,'text-anchor':'middle','dominant-baseline':'middle',
-      class:'board-width-label','data-coordinate':lane.coordinate
-     },lane.width.toFixed(2)+'" W'));
+     if(cw>=38&&laneH>=18){
+      const dimensions=lane.width.toFixed(2)+' × '+lane.length.toFixed(2);
+      const dimensionSize=Math.min(10,Math.max(7,(cw-6)/(dimensions.length*.58)));
+      svg.append(svgNode('text',{
+       x:left+cw/2,y:laneY+laneH/2+6,'text-anchor':'middle','dominant-baseline':'middle',
+       'font-size':dimensionSize,class:'board-width-label','data-coordinate':lane.coordinate
+      },dimensions));
+     }
     }
     if(cw>37){
      const first=cut.lanes[0];
