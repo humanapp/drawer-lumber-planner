@@ -635,3 +635,21 @@ test('glued panel strips show suffixes and unassigned coordinates remain visible
   await expect(page.locator('#solverUnassigned')).toContainText('A1-B');
   await expect(page.locator('#boardLayouts .board-coordinate')).toHaveCount(0);
 });
+
+
+test('JSON import retains multi-letter configuration coordinates and future ID counter',async ({page})=>{
+  await page.goto('/');
+  const project=structuredClone(sampleProject);
+  project.groups[0].items[0].code='AA';
+  project.nextCodeIndex=28;
+  const file={name:'saved-drawers.json',mimeType:'application/json',
+    buffer:Buffer.from(JSON.stringify({format:'drawer-lumber-planner',project}))};
+  page.once('dialog',dialog=>dialog.accept());
+  await page.locator('#projectFile').setInputFiles(file);
+  await expect(page.locator('.drawer-code')).toHaveText('AA');
+  await expect(page.locator('#previews .preview-card').first()).toContainText('AA ·');
+  await page.getByRole('button',{name:'+ Drawer'}).first().click();
+  await expect(page.locator('.drawer-code')).toHaveText(['AA','AC']);
+  await page.reload();
+  await expect(page.locator('.drawer-code')).toHaveText(['AA','AC']);
+});
