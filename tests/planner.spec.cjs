@@ -667,6 +667,12 @@ test('crosscut assignment view shows strip width × length and exports dimension
  const plan=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
  await expect(page.getByRole('button',{name:'Export crosscut PDF'})).toBeVisible();
  const dimensionLabels=page.locator('#boardLayouts .board-width-label');
+ const formatInches=value=>{
+  const units=Math.round(Math.abs(value)*16),whole=Math.floor(units/16),remainder=units%16;
+  if(!remainder)return (value<0?'-':'')+whole+'"';
+  const gcd=(a,b)=>b?gcd(b,a%b):a,divisor=gcd(remainder,16);
+  return (value<0?'-':'')+(whole?whole+'-':'')+(remainder/divisor)+'/'+(16/divisor)+'"';
+ };
  const expectedDimensions=plan.boards.flatMap(board=>board.cuts.flatMap(cut=>cut.lanes.map(lane=>
   formatInches(lane.width)+' × '+formatInches(lane.length))));
  await expect(dimensionLabels).toHaveCount(expectedDimensions.length);
