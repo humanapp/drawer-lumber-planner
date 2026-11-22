@@ -4,7 +4,7 @@
 const PW=792,PH=612,L=38,R=754,TOP=566,BOTTOM=38,W=R-L;
 const ascii=s=>String(s??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7e]/g,'?');
 const escaped=s=>ascii(s).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
-const number=n=>Number(n).toFixed(2);
+const number=n=>root.InchMeasurements.format(n);
 const text=(x,y,size,str,bold=false)=>'BT /'+(bold?'F2':'F1')+' '+size+' Tf 1 0 0 1 '+x.toFixed(2)+' '+y.toFixed(2)+' Tm ('+escaped(str)+') Tj ET\n';
 const rect=(x,y,w,h,stroke=false)=>x.toFixed(2)+' '+y.toFixed(2)+' '+Math.max(0,w).toFixed(2)+' '+Math.max(0,h).toFixed(2)+' re '+(stroke?'S':'f')+'\n';
 const line=(x,y,a,b)=>x.toFixed(2)+' '+y.toFixed(2)+' m '+a.toFixed(2)+' '+b.toFixed(2)+' l S\n';
@@ -42,7 +42,7 @@ function makePdf(plan){
    }
    if(w>31)stream+='0.17 0.14 0.1 rg\n'+text(x+2,base+height+5,7,'C'+(i+1));
   }
-  stream+='0.34 0.39 0.43 rg\n'+text(L,base-13,8,'Uncut tail: '+number(board.available)+'"    Usable width after edge trim: '+number(board.usableWidth)+'"');
+  stream+='0.34 0.39 0.43 rg\n'+text(L,base-13,8,'Uncut tail: '+number(board.available)+'"    Usable width after edge trim: '+number(board.usableWidth));
   y=base-26;
  }
  function tableHeader(){
@@ -70,10 +70,10 @@ function makePdf(plan){
    }
    const lane=row.lane;
    stream+='0.15 0.18 0.22 rg\n'+text(L+5,y,9,'C'+row.cutNo)
-    +text(L+55,y,9,number(row.cut.length)+'"')
+    +text(L+55,y,9,number(row.cut.length))
     +text(L+165,y,9,lane.coordinate,true)
-    +text(L+327,y,9,number(lane.width)+'"',true)
-    +text(L+423,y,9,number(lane.length)+'"')
+    +text(L+327,y,9,number(lane.width),true)
+    +text(L+423,y,9,number(lane.length))
     +text(L+548,y,8,String(lane.drawerLabel||'').slice(0,30));
    stream+='0.83 0.85 0.87 RG\n0.35 w\n'+line(L,y-5,R,y-5);
    y-=17;
