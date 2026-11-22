@@ -501,8 +501,8 @@ test('mixed-length rip lanes retain actual lengths and CSV trim instructions', a
   ]);
   const csv=await fs.readFile(await download.path(),'utf8');
   expect(csv).toContain('Rip Length / Trim To (in)');
-  expect(csv).toContain(',\"24\"\"\"\",\"5-1/4\"\"\"\",');
-  expect(csv).toContain(',\"26\"\"\"\",\"6-1/4\"\"\"\",');
+  expect(csv).toContain(',"24""","5-1/4""",');
+  expect(csv).toContain(',"26""","6-1/4""",');
 });
 
 test('optimizer is deterministic and never commits overlapping crosscuts or partial panels', async ({page})=>{
