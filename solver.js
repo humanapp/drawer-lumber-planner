@@ -7,12 +7,17 @@
  'use strict';
  const n=x=>Math.max(0,Number(x)||0), EPS=1e-7;
  const round=x=>Math.round(x*100000)/100000;
+ const letters=index=>{let result='';for(let n=index+1;n>0;n=Math.floor((n-1)/26))result=String.fromCharCode(65+(n-1)%26)+result;return result;};
+ const roleLetter={front:'F',back:'B',left:'L',right:'R'};
  function demands(project) {
   const out=[],s=project.settings||{},extra=n(s.endExtra),widthExtra=n(s.widthExtra);
+  let designIndex=0;
   for(const group of project.groups||[]){
    const width=n(group.height)+widthExtra;
    if(width<=0)continue;
    for(const item of group.items||[]){
+    const code=/^[A-Z]+$/.test(item.code||'')?item.code:letters(designIndex);
+    designIndex++;
     const q=Math.floor(n(item.qty)),w=n(item.width),d=n(item.depth);
     if(!q||!w||(!item.vertical&&!d))continue;
     const roles=item.vertical?[['front',w+extra],['back',w+extra]]:
@@ -20,6 +25,7 @@
     for(let copy=1;copy<=q;copy++)for(const [role,length] of roles)
      out.push({id:String(item.id)+':'+copy+':'+role,
       drawerId:String(item.id),drawerLabel:String(item.label||'Drawer '+item.id),
+      code,coordinate:code+copy+'-'+roleLetter[role],
       copy,role,length,width,vertical:item.vertical===true,heightGroup:n(group.height)});
    }
   }
@@ -49,7 +55,8 @@
  }
  function lane(part,width,offset,strip=1,strips=1){
   return {partId:part.id,drawerId:part.drawerId,drawerLabel:part.drawerLabel,
-   copy:part.copy,role:part.role,width:round(width),length:part.length,
+   copy:part.copy,role:part.role,coordinate:part.coordinate+(strips>1?'/'+strip:''),
+   width:round(width),length:part.length,
    strip,strips,offset:round(offset)};
  }
  function orderedBoards(boards,mode){
