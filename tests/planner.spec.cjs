@@ -653,3 +653,66 @@ test('JSON import retains multi-letter configuration coordinates and future ID c
   await page.reload();
   await expect(page.locator('.drawer-code')).toHaveText(['AA','AC']);
 });
+
+
+test('crosscut assignment view shows strip widths and exports dimensional plan PDF',async({page})=>{
+ const fs=require('node:fs/promises');
+ const project=structuredClone(sampleProject);
+ project.groups=[{id:1,height:5,items:[{id:2,label:'Base box',qty:1,width:18,depth:20}]}];
+ project.inventory=[{id:'B1',label:'Maple Twelve',width:12,length:96}];
+ await page.addInitScript(({key,project})=>{
+  if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+ },{key,project});
+ await page.goto('/');
+ const plan=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+ await expect(page.getByRole('button',{name:'Export crosscut PDF'})).toBeVisible();
+ const widthLabels=page.locator('#boardLayouts .board-width-label');
+ await expect(widthLabels).toHaveCount(4);
+ for(const width of await widthLabels.allTextContents())expect(width).toBe('5.25" W');
+ const [download]=await Promise.all([
+  page.waitForEvent('download'),
+  page.getByRole('button',{name:'Export crosscut PDF'}).click()
+ ]);
+ expect(download.suggestedFilename()).toBe('drawer-crosscut-assignment.pdf');
+ const bytes=await fs.readFile(await download.path());
+ const pdf=bytes.toString('latin1');
+ expect(pdf.startsWith('%PDF-1.4')).toBe(true);
+ expect(pdf).toContain('%%EOF');
+ expect(pdf).toContain('(CROSSCUT ASSIGNMENT PLAN)');
+ expect(pdf).toContain('(STRIP WIDTH)');
+ expect(pdf).toContain('(CROSSCUT LENGTH)');
+ expect(pdf).toContain('(TRIM-TO LENGTH)');
+ expect(pdf).toContain('(B1  Maple Twelve  12.00" W x 96.00" L)');
+ for(const lane of plan.boards[0].cuts.flatMap(c=>c.lanes)){
+  expect(pdf).toContain('('+lane.coordinate+')');
+  expect(pdf).toContain('('+lane.width.toFixed(2)+'")');
+  expect(pdf).toContain('('+lane.length.toFixed(2)+'")');
+ }
+ const xref=Number(pdf.match(/startxref\n(\d+)\n%%EOF/)?.[1]);
+ expect(pdf.slice(xref,xref+5)).toBe('xref\n');
+});
+
+test('crosscut PDF paginates many boards and reports unassigned panel coordinates',async({page})=>{
+ const fs=require('node:fs/promises');
+ const project=structuredClone(sampleProject);
+ project.groups=[{id:1,height:11,items:[{id:2,label:'Tall boxes',qty:2,width:18,depth:20}]}];
+ project.inventory=Array.from({length:18},(_,i)=>({id:'B'+(i+1),label:'Maple '+(i+1),width:6,length:38}));
+ await page.addInitScript(({key,project})=>{
+  if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+ },{key,project});
+ await page.goto('/');
+ const plan=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+ const [download]=await Promise.all([
+  page.waitForEvent('download'),
+  page.getByRole('button',{name:'Export crosscut PDF'}).click()
+ ]);
+ const pdf=(await fs.readFile(await download.path())).toString('latin1');
+ const pages=Number(pdf.match(/\/Type \/Pages \/Kids \[[^\]]+\] \/Count (\d+)/)?.[1]);
+ expect(pages).toBeGreaterThan(1);
+ expect((pdf.match(/\/Type \/Page \/Parent /g)||[]).length).toBe(pages);
+ expect(pdf).toContain('(B18  Maple 18  6.00" W x 38.00" L)');
+ if(plan.unassigned.length){
+  expect(pdf).toContain('(UNASSIGNED PANELS)');
+  for(const part of plan.unassigned)expect(pdf).toContain(part.coordinate);
+ }
+});
