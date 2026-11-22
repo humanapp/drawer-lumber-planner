@@ -551,3 +551,87 @@ test('optimizer is deterministic and never commits overlapping crosscuts or part
     if(strips.length>1)for(const strip of strips)expect(strip.width).toBeGreaterThanOrEqual(2);
   }
 });
+
+
+test('drawer configuration letters are persistent, non-recycled and included in backups', async ({page})=>{
+  const fs=require('node:fs/promises');
+  const project=structuredClone(sampleProject);
+  project.inventory=[];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  await expect(page.locator('.drawer-code')).toHaveText('A');
+  await page.getByRole('button',{name:'+ Drawer'}).first().click();
+  await expect(page.locator('.drawer-code')).toHaveText(['A','B']);
+  await page.locator('.drawer-row').first().getByRole('button',{name:'×'}).click();
+  await page.getByRole('button',{name:'+ Drawer'}).first().click();
+  await expect(page.locator('.drawer-code')).toHaveText(['B','C']);
+  await page.reload();
+  await expect(page.locator('.drawer-code')).toHaveText(['B','C']);
+  await expect(page.locator('#previews .preview-card').first()).toContainText('B ·');
+  const [download]=await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button',{name:'Save project (.json)'}).click()
+  ]);
+  const backup=JSON.parse(await fs.readFile(await download.path(),'utf8'));
+  expect(backup.project.groups[0].items.map(x=>x.code)).toEqual(['B','C']);
+  expect(backup.project.nextCodeIndex).toBe(3);
+  const [csvDownload]=await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button',{name:'Export drawer CSV'}).click()
+  ]);
+  const csv=await fs.readFile(await csvDownload.path(),'utf8');
+  expect(csv).toContain('Label,Vertical,Code');
+  expect(csv).toMatch(/,B\r?\n/);
+  expect(csv).toMatch(/,C\r?\n?/);
+});
+
+test('coordinate text appears over every assigned rip lane and matches cut CSV',async ({page})=>{
+  const fs=require('node:fs/promises');
+  const project=structuredClone(sampleProject);
+  project.groups=[
+    {id:1,height:5,items:[{id:2,label:'Base drawers',qty:2,width:18,depth:20}]},
+    {id:3,height:6,items:[{id:4,label:'Other drawers',qty:1,width:18,depth:20}]}
+  ];
+  project.inventory=[{id:'B1',width:12.25,length:192},{id:'B2',width:12.25,length:192}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  const plan=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(plan.assigned).toBeGreaterThan(0);
+  const expected=plan.boards.flatMap(b=>b.cuts.flatMap(c=>c.lanes.map(l=>l.coordinate)));
+  expect(await page.locator('#boardLayouts .board-coordinate').allTextContents()).toEqual(expected);
+  expect(await page.locator('#boardLayouts .board-cut').evaluateAll(els=>els.map(el=>el.getAttribute('data-coordinate')))).toEqual(expected);
+  expect(expected.some(c=>/^A2-[FBLR]$/.test(c))).toBe(true);
+  expect(expected.some(c=>/^B1-[FBLR]$/.test(c))).toBe(true);
+  await expect(page.locator('#previews .preview-card').first()).toContainText('A ·');
+  await expect(page.locator('#previews .preview-card').nth(1)).toContainText('B ·');
+  const [download]=await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button',{name:'Export assigned cuts CSV'}).click()
+  ]);
+  const csv=await fs.readFile(await download.path(),'utf8');
+  expect(csv).toContain('Panel Coordinate');
+  for(const coordinate of new Set(expected))expect(csv).toContain(','+coordinate+',');
+});
+
+test('glued panel strips show suffixes and unassigned coordinates remain visible',async ({page})=>{
+  const project=structuredClone(sampleProject);
+  project.groups=[{id:1,height:11,items:[{id:2,label:'Tall drawers',qty:1,width:18,depth:0,vertical:true}]}];
+  project.inventory=[{id:'B1',width:6,length:70},{id:'B2',width:6,length:70}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  const plan=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(plan.assigned).toBe(2);
+  expect(plan.glueUps).toBe(2);
+  const coordinates=await page.locator('#boardLayouts .board-coordinate').allTextContents();
+  expect(coordinates.sort()).toEqual(['A1-B/1','A1-B/2','A1-F/1','A1-F/2']);
+  await page.getByLabel('Board B2 length').fill('10');
+  await expect(page.locator('#solverUnassigned')).toContainText('A1-F');
+  await expect(page.locator('#solverUnassigned')).toContainText('A1-B');
+  await expect(page.locator('#boardLayouts .board-coordinate')).toHaveCount(0);
+});
