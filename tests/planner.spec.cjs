@@ -631,9 +631,9 @@ test('glued panel strips show suffixes and unassigned coordinates remain visible
   const coordinates=await page.locator('#boardLayouts .board-coordinate').allTextContents();
   expect(coordinates.sort()).toEqual(['A1-B/1','A1-B/2','A1-F/1','A1-F/2']);
   await page.getByLabel('Board B2 length').fill('10');
-  await expect(page.locator('#solverUnassigned')).toContainText('A1-F');
   await expect(page.locator('#solverUnassigned')).toContainText('A1-B');
-  await expect(page.locator('#boardLayouts .board-coordinate')).toHaveCount(0);
+  await expect(page.locator('#solverUnassigned')).not.toContainText('A1-F');
+  await expect(page.locator('#boardLayouts .board-coordinate')).toHaveText(['A1-F/1','A1-F/2']);
 });
 
 
