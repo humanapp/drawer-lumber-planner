@@ -452,3 +452,102 @@ test('legacy estimator settings are ignored when saved project is imported',asyn
   expect(exportData.project.inventory[0].id).toBe('B3');
   expect(exportData.project.groups[0].items[0].label).toBe('Upper-left');
 });
+
+
+test('mixed-width drawer panels share a full-width crosscut', async ({page})=>{
+  const project=structuredClone(sampleProject);
+  project.settings.kerf=.125;
+  project.groups=[
+    {id:1,height:5,items:[{id:2,label:'Five-inch panel',qty:1,width:18,depth:0,vertical:true}]},
+    {id:3,height:6,items:[{id:4,label:'Six-inch panel',qty:1,width:18,depth:0,vertical:true}]},
+  ];
+  project.inventory=[{id:'B1',label:'Wide maple',width:12.25,length:24}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  const plan=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(plan.assigned).toBe(2);
+  expect(plan.crosscuts).toBe(1);
+  const cut=plan.boards[0].cuts[0];
+  expect(cut.lanes).toHaveLength(2);
+  expect(cut.lanes.map(l=>l.width).sort((a,b)=>a-b)).toEqual([5.25,6.25]);
+  expect(cut.lanes[1].offset).toBeGreaterThan(cut.lanes[0].offset);
+  expect(cut.lanes[0].width+cut.lanes[1].width+project.settings.kerf)
+    .toBeLessThanOrEqual(plan.boards[0].usableWidth);
+  await expect(page.locator('#boardLayouts .board-cut')).toHaveCount(2);
+});
+
+test('mixed-length rip lanes retain actual lengths and CSV trim instructions', async ({page})=>{
+  const fs=require('node:fs/promises');
+  const project=structuredClone(sampleProject);
+  project.groups=[
+    {id:1,height:5,items:[{id:2,label:'Short',qty:1,width:18,depth:0,vertical:true}]},
+    {id:3,height:6,items:[{id:4,label:'Long',qty:1,width:20,depth:0,vertical:true}]},
+  ];
+  project.inventory=[{id:'B1',width:12.25,length:26}];
+  await page.addInitScript(({key,project})=>{
+    if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+  },{key,project});
+  await page.goto('/');
+  const plan=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+  expect(plan.assigned).toBe(2);
+  expect(plan.crosscuts).toBe(1);
+  expect(plan.boards[0].cuts[0].length).toBe(26);
+  expect(plan.boards[0].cuts[0].lanes.map(l=>l.length).sort((a,b)=>a-b)).toEqual([24,26]);
+  const [download]=await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button',{name:'Export assigned cuts CSV'}).click()
+  ]);
+  const csv=await fs.readFile(await download.path(),'utf8');
+  expect(csv).toContain('Rip Length / Trim To (in)');
+  expect(csv).toContain(',24.000,5.250,');
+  expect(csv).toContain(',26.000,6.250,');
+});
+
+test('optimizer is deterministic and never commits overlapping crosscuts or partial panels', async ({page})=>{
+  const project=structuredClone(sampleProject);
+  project.settings.minGlueWidth=2;
+  project.groups[0].height=11;
+  project.groups[0].items[0]={id:2,label:'Tall',qty:4,width:18,depth:20};
+  project.inventory=[
+    {id:'B1',width:12,length:96},
+    {id:'B2',width:6,length:96},
+    {id:'B3',width:11,length:90},
+    {id:'B4',width:7,length:80}
+  ];
+  await page.goto('/');
+  const {a,b}=await page.evaluate(project=>({
+    a:window.DrawerSolver.solve(project),
+    b:window.DrawerSolver.solve(project)
+  }),project);
+  expect(a).toEqual(b);
+  const assignments=new Map(Object.entries(a.assignments));
+  expect(a.assigned+a.unassigned.length).toBe(a.parts.length);
+  for(const board of a.boards){
+    let pos=0;
+    for(const cut of board.cuts){
+      expect(cut.start).toBeGreaterThanOrEqual(pos-1e-5);
+      expect(cut.length).toBeGreaterThan(0);
+      expect(cut.start+cut.length).toBeLessThanOrEqual(board.length+1e-5);
+      let width=0;
+      for(const lane of cut.lanes){
+        expect(lane.length).toBeLessThanOrEqual(cut.length+1e-5);
+        expect(lane.width).toBeGreaterThan(0);
+        expect(lane.offset).toBeGreaterThanOrEqual(width-1e-5);
+        width=lane.offset+lane.width;
+        expect(width).toBeLessThanOrEqual(board.usableWidth+1e-5);
+      }
+      pos=cut.start+cut.length+cut.kerf;
+    }
+  }
+  for(const part of a.parts){
+    const strips=assignments.get(part.id);
+    if(!strips){
+      expect(a.unassigned.some(p=>p.id===part.id)).toBe(true);
+      continue;
+    }
+    expect(strips.reduce((sum,x)=>sum+x.width,0)).toBeCloseTo(part.width,4);
+    if(strips.length>1)for(const strip of strips)expect(strip.width).toBeGreaterThanOrEqual(2);
+  }
+});
