@@ -655,7 +655,7 @@ test('JSON import retains multi-letter configuration coordinates and future ID c
 });
 
 
-test('crosscut assignment view shows strip widths and exports dimensional plan PDF',async({page})=>{
+test('crosscut assignment view shows strip width × length and exports dimensional plan PDF',async({page})=>{
  const fs=require('node:fs/promises');
  const project=structuredClone(sampleProject);
  project.groups=[{id:1,height:5,items:[{id:2,label:'Base box',qty:1,width:18,depth:20}]}];
@@ -666,9 +666,11 @@ test('crosscut assignment view shows strip widths and exports dimensional plan P
  await page.goto('/');
  const plan=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
  await expect(page.getByRole('button',{name:'Export crosscut PDF'})).toBeVisible();
- const widthLabels=page.locator('#boardLayouts .board-width-label');
- await expect(widthLabels).toHaveCount(4);
- for(const width of await widthLabels.allTextContents())expect(width).toBe('5.25" W');
+ const dimensionLabels=page.locator('#boardLayouts .board-width-label');
+ const expectedDimensions=plan.boards.flatMap(board=>board.cuts.flatMap(cut=>cut.lanes.map(lane=>
+  lane.width.toFixed(2)+' × '+lane.length.toFixed(2))));
+ await expect(dimensionLabels).toHaveCount(expectedDimensions.length);
+ expect(await dimensionLabels.allTextContents()).toEqual(expectedDimensions);
  const [download]=await Promise.all([
   page.waitForEvent('download'),
   page.getByRole('button',{name:'Export crosscut PDF'}).click()
