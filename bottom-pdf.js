@@ -24,6 +24,14 @@ function makePdf(plan){
   if(y<chartHeight+95){page()}
   stream+='0.13 0.18 0.23 rg\n'+txt(margin,y,12,sheet.label+'  '+fmt(sheet.width)+' x '+fmt(sheet.length)+'  THICKNESS '+fmt(sheet.thickness),true);
   y-=19;
+  if(plan.cutOrder==='rip-first'){
+   stream+='0.25 0.32 0.3 rg\\n'+txt(margin,y,9,
+    'RIP FIRST: full-length strips parallel to grain, then crosscut within each strip.',true);
+   y-=13;
+  }else{
+   stream+='0.3 0.3 0.3 rg\\n'+txt(margin,y,8,'Alternate guillotine layout; see panel positions.');
+   y-=13;
+  }
   const scale=Math.min(chartWidth/sheet.width,chartHeight/sheet.length);
   const sw=sheet.width*scale,sl=sheet.length*scale,x=margin,top=y;
   stream+='0.62 0.65 0.67 RG\n0.8 w\n'+rect(x,top-sl,sw,sl);
@@ -35,6 +43,15 @@ function makePdf(plan){
    if(pw>=42&&ph>=18)stream+='0.18 0.19 0.18 rg\n'+txt(px+3,py+ph/2,8,part.coordinate,true);
   }
   y=top-sl-19;
+  if(plan.cutOrder==='rip-first'){
+   for(const strip of sheet.strips){
+    if(y<bottom+14){page();stream+='0.13 0.18 0.23 rg\\n'+txt(margin,y,11,sheet.label+' (continued)',true);y-=18}
+    stream+='0.25 0.32 0.3 rg\\n'+txt(margin+4,y,9,
+     'R'+strip.index+': rip '+fmt(strip.width)+' wide x '+fmt(sheet.length)+' full length; crosscut '+strip.placements.map(p=>fmt(p.cutLength)).join(', '));
+    y-=13;
+   }
+   y-=5;
+  }
   for(const part of rows){
    if(y<bottom+15){page();stream+='0.13 0.18 0.23 rg\n'+txt(margin,y,11,sheet.label+' (continued)',true);y-=18}
    stream+='0.2 0.23 0.27 rg\n'+txt(margin+4,y,9,part.coordinate,true)
