@@ -826,11 +826,11 @@ test('bottom solver prioritizes full-length grain-parallel rips, then crosscuts 
  expect(sheet.strips).toHaveLength(2);
  expect(sheet.strips.map(s=>s.width).sort((a,b)=>a-b)).toEqual([10.5,19.5]);
  for(const strip of sheet.strips){
-  expect(strip.length).toBe(95.875);
+  expect(strip.length).toBe(96);
   expect(strip.placements).toHaveLength(2);
   expect(strip.placements[0].x).toBe(strip.placements[1].x);
-  expect(strip.placements[0].y).toBe(.0625);
-  expect(strip.placements[1].y).toBe(29.9375);
+  expect(strip.placements[0].y).toBe(0);
+  expect(strip.placements[1].y).toBe(29.875);
  }
  await expect(page.locator('#bottomLayouts')).toContainText('RIP FIRST');
  await expect(page.locator('#bottomLayouts')).toContainText('full-length strips');
@@ -1112,10 +1112,10 @@ test('rough-cut centerlines mark half of simulated wide kerf and list oversize b
  expect(geometry.kerf).toBe(1);
  for(const p of geometry.rough){
   expect(p.finish).toEqual([20,20]);
-  expect([p.cut.width,p.cut.length]).toEqual([21,21]);
+  expect([p.cut.width,p.cut.length]).toEqual([20.5,p.coordinate==='A1-BT'?20.5:21]);
   expect(p.cut.margin).toBe(.5);
-  expect(p.cut.bounds.width).toBe(21);
-  expect(p.cut.bounds.length).toBe(21);
+  expect(p.cut.bounds.width).toBe(20.5);
+  expect(p.cut.bounds.length).toBe(p.coordinate==='A1-BT'?20.5:21);
  }
  // The two kerf corridors meet exactly at the shared track-saw centerline.
  const a=geometry.rough[0].cut.bounds,b=geometry.rough[1].cut.bounds;
@@ -1125,7 +1125,7 @@ test('rough-cut centerlines mark half of simulated wide kerf and list oversize b
  await expect(page.locator('#bottomLayouts .rough-cut-outline').first())
   .toHaveAttribute('stroke','#b3262c');
  await expect(page.locator('#bottomCutList')).toContainText('Rough W × D');
- await expect(page.locator('#bottomCutList')).toContainText('21" × 21"');
+ await expect(page.locator('#bottomCutList')).toContainText('20 1/2" × 21"');
  await expect(page.locator('#bottomLayouts')).not.toContainText('Rough-cut edge clearance insufficient');
  const bytes=await page.evaluate(async()=>{
   const plan=window.BottomSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1')));
@@ -1134,8 +1134,8 @@ test('rough-cut centerlines mark half of simulated wide kerf and list oversize b
  const pdf=Buffer.from(bytes).toString('latin1');
  expect(pdf).toContain('0.7 0.12 0.16 RG');
  expect(pdf).toContain('[4 3] 0 d');
- expect(pdf).toContain('RED DASH: rough cut at 1/2" outside finished edges');
- expect(pdf).toContain('(R 21" x 21"');
+ expect(pdf).toContain('RED DASH: rough cuts 1/2" beyond non-sheet edges');
+ expect(pdf).toContain('(R 20-1/2" x 20-1/2"');
 });
 
 test('rough margin warns when an outer panel edge lacks clearance',async({page})=>{
@@ -1147,9 +1147,11 @@ test('rough margin warns when an outer panel edge lacks clearance',async({page})
    window.BottomSolver.roughCutFor({x:2,y:2,width:20,length:20,cutWidth:20,cutLength:20},sheet,1)
   ];
  });
- expect(outcome[0].fits).toBe(false);
- expect(outcome[0].clipped.left).toBe(true);
- expect(outcome[0].clipped.top).toBe(true);
+ expect(outcome[0].fits).toBe(true);
+ expect(outcome[0].finalEdges.left).toBe(true);
+ expect(outcome[0].finalEdges.top).toBe(true);
+ expect(outcome[0].clipped.left).toBe(false);
+ expect(outcome[0].clipped.top).toBe(false);
  expect(outcome[1].fits).toBe(true);
  expect(outcome[1].bounds).toEqual({x:1.5,y:1.5,width:21,length:21});
 });
@@ -1171,9 +1173,9 @@ test('wide kerf reserves half its width around EVERY outside panel edge',async({
  expect(plan.placed).toBe(5);
  expect(plan.unassigned).toHaveLength(0);
  for(const sheet of plan.sheets){
-  expect(sheet.packingInset).toBe(.75);
-  expect(sheet.packingWidth).toBe(46.5);
-  expect(sheet.packingLength).toBe(94.5);
+  expect(sheet.packingInset).toBe(.25);
+  expect(sheet.packingWidth).toBe(47.5);
+  expect(sheet.packingLength).toBe(95.5);
  }
  const errors=await page.evaluate(project=>{
   const plan=window.BottomSolver.solve(project);
@@ -1208,9 +1210,9 @@ test('outer half-kerf margin reduces capacity only when it truly cannot fit',asy
     rough:plan.sheets[0].placements.map(p=>window.BottomSolver.roughCutFor(p,plan.sheets[0],kerf))};
   }
   return {
-   fits:run(1,.25,46.5,94.5),
-   fails:run(1,.25,46.53125,94.5),
-   noTrim:run(1,0,47,95),
+   fits:run(1,.25,47.5,95.5),
+   fails:run(1,.25,47.53125,95.5),
+   noTrim:run(1,0,48,96),
    legacy:run(0,0,48,96)
   };
  });
@@ -1218,7 +1220,37 @@ test('outer half-kerf margin reduces capacity only when it truly cannot fit',asy
  expect(output.fits.rough[0].fits).toBe(true);
  expect(output.fails.unassigned).toBe(1);
  expect(output.noTrim.placed).toBe(1);
- expect(output.noTrim.inset).toBe(.5);
+ expect(output.noTrim.inset).toBe(0);
  expect(output.legacy.placed).toBe(1);
  expect(output.legacy.inset).toBe(0);
+});
+
+test('trimmed sheet edges serve as finished boundaries and omit rough cuts there',async({page})=>{
+ const project={
+  groups:[{id:1,height:5,items:[{id:2,code:'A',qty:1,width:20.5,depth:20.25}]}],
+  bottomSettings:{wallThickness:.5,grooveDepth:.25,kerf:1,factoryEdgeTrim:.25},
+  sheets:[{id:'S1',width:48,length:96,thickness:.25,qty:1}]
+ };
+ await page.goto('/');
+ const result=await page.evaluate(project=>{
+  const plan=window.BottomSolver.solve(project);
+  const sheet=plan.sheets[0],p=sheet.placements[0];
+  return {p,rough:window.BottomSolver.roughCutFor(p,sheet,plan.kerf)};
+ },project);
+ expect(result.p.x).toBe(.25);
+ expect(result.p.y).toBe(.25);
+ expect(result.rough.finalEdges).toEqual({left:true,right:false,top:true,bottom:false});
+ expect(result.rough.allowances).toEqual({left:0,right:.5,top:0,bottom:.5});
+ expect(result.rough.width).toBe(20.5);
+ expect(result.rough.length).toBe(20.5);
+ expect(result.rough.bounds).toEqual({x:.25,y:.25,width:20.5,length:20.5});
+ // Exactly filling the trimmed sheet makes all four panel edges final.
+ const full=await page.evaluate(()=>{
+  const sheet={width:48,length:96,trim:.25};
+  return window.BottomSolver.roughCutFor({width:47.5,length:95.5,x:.25,y:.25,cutWidth:47.5,cutLength:95.5},sheet,1);
+ });
+ expect(full.fits).toBe(true);
+ expect(Object.values(full.finalEdges).every(Boolean)).toBe(true);
+ expect(full.width).toBe(47.5);
+ expect(full.length).toBe(95.5);
 });
