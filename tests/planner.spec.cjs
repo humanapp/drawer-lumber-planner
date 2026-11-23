@@ -1028,3 +1028,64 @@ test('bottom PDF uses enlarged portrait diagram and keys every panel coordinate'
  expect(pdf).toContain('(1. P1-BT)');
  expect(pdf).toContain('(27. P27-BT)');
 });
+
+
+test('global factory edge trim preserves physical coordinates in both nesting strategies',async({page})=>{
+ await page.goto('/');
+ const results=await page.evaluate(()=>{
+  const make=(qty,width,depth,trim)=>window.BottomSolver.solve({
+   groups:[{id:1,height:5,items:[{id:2,code:'A',qty,width,depth,label:'Inset panels'}]}],
+   bottomSettings:{wallThickness:.5,grooveDepth:.25,kerf:.125,factoryEdgeTrim:trim,allowRotation:false},
+   sheets:[{id:'S1',width:48,length:96,thickness:.25,qty:1}]
+  });
+  return {
+   baseline:make(1,48.5,96.25,0),
+   inset:make(1,48.5,96.25,.25),
+   rip:make(4,21,25,.5),
+   empty:make(1,10,10,24)
+  };
+ });
+ expect(results.baseline.placed).toBe(1);
+ expect(results.inset.placed).toBe(0);
+ expect(results.inset.unassigned).toHaveLength(1);
+ expect(results.inset.sheets[0].usableWidth).toBe(47.5);
+ expect(results.inset.sheets[0].usableLength).toBe(95.5);
+ expect(results.rip.placed).toBe(4);
+ expect(results.rip.sheets[0].trim).toBe(.5);
+ for(const p of results.rip.sheets[0].placements){
+  expect(p.x).toBeGreaterThanOrEqual(.5);
+  expect(p.y).toBeGreaterThanOrEqual(.5);
+  expect(p.x+p.cutWidth).toBeLessThanOrEqual(47.5+1e-6);
+  expect(p.y+p.cutLength).toBeLessThanOrEqual(95.5+1e-6);
+ }
+ expect(results.empty.placed).toBe(0);
+});
+
+test('factory edge trim field accepts fractions and shades web/PDF scrap bands',async({page})=>{
+ const project=structuredClone(sampleProject);
+ project.groups=[{id:1,height:5,items:[{id:2,code:'A',qty:1,width:18,depth:20,label:'Bottom'}]}];
+ project.sheets=[{id:'S1',label:'Plywood',width:48,length:96,thickness:.25,qty:1}];
+ await page.addInitScript(({key,project})=>{
+  if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project))
+ },{key,project});
+ await page.goto('/');
+ const field=page.getByLabel('Factory edge trim (in, per edge)');
+ await expect(field).toHaveValue('0"');
+ await field.fill('3/8');
+ await field.press('Tab');
+ await expect(page.getByLabel('Factory edge trim (in, per edge)')).toHaveValue('3/8"');
+ const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('drawer-lumber-planner-v1')));
+ expect(state.bottomSettings.factoryEdgeTrim).toBe(.375);
+ const layout=page.locator('#bottomLayouts svg');
+ await expect(layout.locator('rect[fill="#b3b3b3"]')).toHaveCount(4);
+ const pdf=await page.evaluate(async()=>{
+  const bytes=await window.BottomPdf.makePdf(window.BottomSolver.solve(
+   JSON.parse(localStorage.getItem('drawer-lumber-planner-v1')))).arrayBuffer();
+  return Array.from(new Uint8Array(bytes));
+ });
+ const body=Buffer.from(pdf).toString('latin1');
+ expect(body).toContain('EDGE TRIM 3/8"');
+ expect(body).toContain('0.74 0.74 0.74 rg');
+ await page.reload();
+ await expect(page.getByLabel('Factory edge trim (in, per edge)')).toHaveValue('3/8"');
+});
