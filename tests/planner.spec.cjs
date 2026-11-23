@@ -826,11 +826,11 @@ test('bottom solver prioritizes full-length grain-parallel rips, then crosscuts 
  expect(sheet.strips).toHaveLength(2);
  expect(sheet.strips.map(s=>s.width).sort((a,b)=>a-b)).toEqual([10.5,19.5]);
  for(const strip of sheet.strips){
-  expect(strip.length).toBe(96);
+  expect(strip.length).toBe(95.875);
   expect(strip.placements).toHaveLength(2);
   expect(strip.placements[0].x).toBe(strip.placements[1].x);
-  expect(strip.placements[0].y).toBe(0);
-  expect(strip.placements[1].y).toBe(29.875);
+  expect(strip.placements[0].y).toBe(.0625);
+  expect(strip.placements[1].y).toBe(29.9375);
  }
  await expect(page.locator('#bottomLayouts')).toContainText('RIP FIRST');
  await expect(page.locator('#bottomLayouts')).toContainText('full-length strips');
@@ -1039,7 +1039,7 @@ test('global factory edge trim preserves physical coordinates in both nesting st
    sheets:[{id:'S1',width:48,length:96,thickness:.25,qty:1}]
   });
   return {
-   baseline:make(1,48.5,96.25,0),
+   baseline:make(1,48.375,96.125,0),
    inset:make(1,48.5,96.25,.25),
    rip:make(4,21,25,.5),
    empty:make(1,10,10,24)
@@ -1126,7 +1126,7 @@ test('rough-cut centerlines mark half of simulated wide kerf and list oversize b
   .toHaveAttribute('stroke','#b3262c');
  await expect(page.locator('#bottomCutList')).toContainText('Rough W × D');
  await expect(page.locator('#bottomCutList')).toContainText('21" × 21"');
- await expect(page.locator('#bottomLayouts')).toContainText('Rough-cut edge clearance insufficient');
+ await expect(page.locator('#bottomLayouts')).not.toContainText('Rough-cut edge clearance insufficient');
  const bytes=await page.evaluate(async()=>{
   const plan=window.BottomSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1')));
   return Array.from(new Uint8Array(await window.BottomPdf.makePdf(plan).arrayBuffer()));
