@@ -128,7 +128,7 @@ test('measured inventory persists and unassigned panels are reported', async ({ 
   await page.getByLabel('Board B1 length').fill('40');
   await page.reload();
   await expect(page.getByLabel('Board B1 label')).toHaveValue('Maple 6 inch');
-  await expect(page.getByLabel('Board B1 length')).toHaveValue('40');
+  await expect(page.getByLabel('Board B1 length')).toHaveValue('40"');
   await expect(page.locator('#solverSummary')).toContainText('Unassigned panels');
   await expect(page.locator('#solverUnassigned')).toContainText('panels still need stock');
 });
@@ -223,7 +223,7 @@ test('glue-up strips respect editable 2-inch minimum and the setting survives re
     if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
   },{key,project});
   await page.goto('/');
-  await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('2');
+  await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('2"');
   const plan=await page.evaluate(()=>window.DrawerSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
   expect(plan.assigned).toBe(2);
   expect(plan.glueUps).toBe(2);
@@ -246,7 +246,7 @@ test('older saved projects default minimum glue-up strip to 2 inches', async ({ 
     if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
   },{key,project});
   await page.goto('/');
-  await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('2');
+  await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('2"');
   await page.getByLabel('Minimum glue-up strip width (in)').fill('2.5');
   await page.reload();
   await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('2 1/2"');
@@ -356,7 +356,7 @@ test('PDF inventory exporter includes only measured boards, independent of assig
   expect(pdf).toContain('(7-1/4")');
   expect(pdf).toContain('(88-1/2")');
   expect(pdf).not.toContain('(B1)');
-  await expect(page.getByLabel('Board B12 width')).toHaveValue('7.25');
+  await expect(page.getByLabel('Board B12 width')).toHaveValue('7 1/4"');
 });
 
 
@@ -792,7 +792,7 @@ test('sheet inventory, settings, and PDF bottom cutting list persist',async({pag
  await page.getByLabel('Drawer wall thickness (in)').fill('0.625');
  await page.getByLabel('Drawer wall thickness (in)').press('Tab');
  await page.reload();
- await expect(page.getByLabel('Sheet S1 width')).toHaveValue('48');
+ await expect(page.getByLabel('Sheet S1 width')).toHaveValue('48"');
  await expect(page.getByLabel('Drawer wall thickness (in)')).toHaveValue('5/8"');
  await expect(page.locator('#bottomCutList')).toContainText('19-1/4" × 29-5/8"');
  const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Export bottom PDF'}).click()]);
@@ -970,7 +970,7 @@ test('all inch measurement inputs accept fractions and persist numeric values',a
   ['Drawer wall thickness (in)','5/8',.625],
   ['Bottom groove penetration (in)','3/16',.1875],
   ['Panel cutting kerf (in)','3/32',.09375],
-  ['Sheet S1 width','47 15/16',47.46875],
+  ['Sheet S1 width','47 15/16',47.9375],
   ['Sheet S1 length','95 7/8',95.875]
  ];
  for(const [label,value] of changes){
