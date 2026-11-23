@@ -9,24 +9,36 @@ const round=v=>Math.round(v*100000)/100000;
 const codeFor=i=>{let s='';for(let x=i+1;x>0;x=Math.floor((x-1)/26))s=String.fromCharCode(65+(x-1)%26)+s;return s;};
 const thicknessFor=h=>n(h)<=5.5?0.25:0.5;
 function demands(project){
- const config=project.bottomSettings||{},widthDeduction=config.widthDeduction===undefined?.5:n(config.widthDeduction),
-  depthDeduction=config.depthDeduction===undefined?.5:n(config.depthDeduction);
+ const config=project.bottomSettings||{};
+ // Groove width (1/4") controls the tongue thickness, NOT the panel footprint.
+ // Geometry is set by the wall thickness and how deeply the bottom enters each
+ // groove. Default: 1/2" walls with 1/4" groove penetration.
+ const wallThickness=config.wallThickness===undefined?.5:n(config.wallThickness),
+  grooveDepth=config.grooveDepth===undefined?.25:n(config.grooveDepth),
+  inset=Math.max(0,wallThickness-grooveDepth);
  const parts=[];let index=0;
  for(const group of project.groups||[]){
   for(const item of group.items||[]){
    const code=/^[A-Z]+$/.test(item.code||'')?item.code:codeFor(index);
    index++;
-   // Vertical pullouts have an upright height in the width field and their
-   // depth is not a conventional drawer-box dimension.
-   if(item.vertical)continue;
-   const width=round(n(item.width)-widthDeduction),
-    length=round(n(item.depth)-depthDeduction),qty=Math.floor(n(item.qty));
+   // Standard drawer: two side grooves + one front groove. At the rear,
+   // the bottom runs below the shortened back to its outside rear face so
+   // it can be screwed upward into the back.
+   // Vertical pullout: bottom captured in grooves on all four sides.
+   // Vertical drawer row Width is upright height; group Height is footprint
+   // width. Row Depth is its front-to-back separation/footprint depth.
+   const vertical=item.vertical===true;
+   const outsideWidth=vertical?n(group.height):n(item.width);
+   const outsideDepth=n(item.depth);
+   const width=round(outsideWidth-2*inset),
+    length=round(outsideDepth-(vertical?2*inset:inset)),
+    qty=Math.floor(n(item.qty));
    if(width<=EPS||length<=EPS||qty<=0)continue;
    const thickness=thicknessFor(group.height);
    for(let copy=1;copy<=qty;copy++)parts.push({
     id:String(item.id)+':'+copy+':bottom',coordinate:code+copy+'-BT',
     drawerId:String(item.id),label:String(item.label||'Drawer '+item.id),
-    thickness,width,length,copy
+    thickness,width,length,copy,vertical,construction:vertical?'four-groove':'three-groove-back-overlap'
    });
   }
  }
@@ -114,7 +126,7 @@ function plan(project,mode){
     sum+b.width*b.length-b.placements.reduce((v,p)=>v+p.width*p.length,0):sum,0),
   usedArea=sheets.reduce((sum,b)=>sum+b.placements.reduce((v,p)=>v+p.width*p.length,0),0);
  return {sheets,parts,placed,unassigned,usedSheets,wastedArea,usedArea,kerf,allowRotation,
-   skippedVertical:(project.groups||[]).flatMap(g=>g.items||[]).filter(i=>i.vertical).length};
+   skippedVertical:0};
 }
 // Rip-first layout: every strip runs the full length of the sheet, parallel
 // to grain. Crosscuts within each strip follow, with a kerf between panels.
@@ -197,7 +209,7 @@ function ripFirstPlan(project,mode){
   usedArea=sheets.reduce((sum,s)=>sum+s.placements.reduce((a,p)=>a+p.width*p.length,0),0);
  return {sheets,parts,placed,unassigned,usedSheets,wastedArea,usedArea,
   kerf,allowRotation,cutOrder:'rip-first',
-  skippedVertical:(project.groups||[]).flatMap(g=>g.items||[]).filter(i=>i.vertical).length};
+  skippedVertical:0};
 }
 function solve(project){
  let best=null;
