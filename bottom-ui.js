@@ -11,15 +11,15 @@ const download=(name,blob)=>{
 };
 function render(state,save){
  if(!Array.isArray(state.sheets))state.sheets=[];
- state.bottomSettings={widthDeduction:.5,depthDeduction:.5,kerf:.125,allowRotation:false,...state.bottomSettings};
+ state.bottomSettings={wallThickness:.5,grooveDepth:.25,kerf:.125,allowRotation:false,...state.bottomSettings};
  const commit=()=>{save();render(state,save)};
  const settings=$('bottomSettings'),inventory=$('bottomSheets'),summary=$('bottomSummary'),
   drawings=$('bottomLayouts'),list=$('bottomCutList');
  if(!settings)return;
  for(const el of [settings,inventory,summary,drawings,list])el.replaceChildren();
  for(const [key,label,step] of [
-  ['widthDeduction','Bottom side-to-side deduction (in)',.0625],
-  ['depthDeduction','Bottom front-to-back deduction (in)',.0625],
+  ['wallThickness','Drawer wall thickness (in)',.0625],
+  ['grooveDepth','Bottom groove penetration (in)',.0625],
   ['kerf','Panel cutting kerf (in)',.001]
  ]){
   const field=node('label',{class:'field'},label);
@@ -90,11 +90,7 @@ function render(state,save){
    'R'+strip.index+': '+fmt(strip.width)+' wide × '+fmt(sheet.length)+' long; crosscut '+strip.placements.map(p=>fmt(p.cutLength)).join(', ')).join(' | ')));
   const image=svg('svg',{viewBox:'0 0 '+(sheet.width+4)+' '+(sheet.length+4),role:'img','aria-label':'Bottom layout for '+sheet.label});
   image.append(svg('rect',{x:2,y:2,width:sheet.width,height:sheet.length,fill:'#e8d8bb',stroke:'#806a49','stroke-width':.3}));
-  if(ripFirst)for(const strip of sheet.strips){
-   const line=svg('line',{x1:strip.x+2,y1:2,x2:strip.x+2,y2:sheet.length+2,
-    stroke:'#725b3c','stroke-width':.18,'stroke-dasharray':'1 .6'});
-   image.append(line);
-  }
+
   for(const [i,p] of sheet.placements.entries()){
    const x=p.x+2,y=p.y+2,w=p.cutWidth,h=p.cutLength;
    const group=svg('g');
@@ -106,6 +102,27 @@ function render(state,save){
    }
    image.append(group);
   }
+  // Project cut positions across the full sheet as low-contrast alignment
+  // guides; the colored panel borders remain the actual cut geometry.
+  const verticalGuides=new Set(),horizontalGuides=new Set();
+  for(const p of sheet.placements){
+   const x=p.x+p.cutWidth,y=p.y+p.cutLength;
+   if(x>1e-6&&x<sheet.width-1e-6)verticalGuides.add(x.toFixed(5));
+   if(y>1e-6&&y<sheet.length-1e-6)horizontalGuides.add(y.toFixed(5));
+  }
+  const guides=svg('g',{'class':'sheet-cut-guides','aria-label':'Projected full-sheet cut guides',
+   'pointer-events':'none',opacity:'.42'});
+  for(const value of verticalGuides){
+   const x=Number(value)+2;
+   guides.append(svg('line',{x1:x,y1:2,x2:x,y2:sheet.length+2,
+    stroke:'#929292','stroke-width':'.14','stroke-dasharray':'.75 .9'}));
+  }
+  for(const value of horizontalGuides){
+   const y=Number(value)+2;
+   guides.append(svg('line',{x1:2,y1:y,x2:sheet.width+2,y2:y,
+    stroke:'#929292','stroke-width':'.14','stroke-dasharray':'.75 .9'}));
+  }
+  image.append(guides);
   card.append(image);drawings.append(card);
  }
  if(plan.placed){
@@ -121,7 +138,7 @@ function render(state,save){
   list.append(table);
  }
  if(plan.unassigned.length)list.append(node('p',{class:'warn'},'Unassigned: '+plan.unassigned.map(p=>p.coordinate+' ('+fmt(p.width)+' × '+fmt(p.length)+', '+fmt(p.thickness)+')').join(', ')));
- if(plan.skippedVertical)list.append(node('p',{class:'note'},plan.skippedVertical+' vertical configuration(s) excluded: specify their bottom dimensions separately before cutting.'));
+ list.append(node('p',{class:'note'},'Conventional bottoms: side and front grooves, rear edge under back. Vertical pullouts: four grooves; footprint width uses group height, depth uses row depth. Groove penetration is editable.'));
 }
 root.BottomUI={render};
 })(typeof window!=='undefined'?window:globalThis);
