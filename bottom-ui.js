@@ -121,7 +121,7 @@ function render(state,save){
   const roughMargin=plan.kerf/2;
   card.append(node('p',{class:'note'},instructions+' '+sheet.placements.length+' bottoms; diagram width horizontal and grain vertical.'+
    (sheet.trim?' Factory edge trim '+fmt(sheet.trim)+' on each edge.':'')+
-   (plan.kerf>0?' Red dashed outlines = track-saw rough blanks, '+fmt(roughMargin)+' extra per edge.':'')));
+   (plan.kerf>0?' Red dashed marks = track-saw rough cuts; '+fmt(roughMargin)+' extra on interior edges only. Trimmed sheet edges are final edges.':'')));
   if(ripFirst)card.append(node('p',{class:'note'},sheet.strips.map(strip=>
    'R'+strip.index+': '+fmt(strip.width)+' wide × '+fmt(sheet.length)+' long; crosscut '+strip.placements.map(p=>fmt(p.cutLength)).join(', ')).join(' | ')));
   const image=svg('svg',{viewBox:'0 0 '+(sheet.width+4)+' '+(sheet.length+4),role:'img','aria-label':'Bottom layout for '+sheet.label});
@@ -170,7 +170,14 @@ function render(state,save){
     'clip-path':'url(#'+clipId+')'});
    for(const p of sheet.placements){
     const rough=root.BottomSolver.roughCutFor(p,sheet,plan.kerf),r=rough.bounds;
-    const outline=svg('rect',{x:r.x+2,y:r.y+2,width:r.width,height:r.length,
+    const x1=r.x+2,y1=r.y+2,x2=x1+r.width,y2=y1+r.length;
+    // Omit red cut marks on sides that already have a finished sheet edge.
+    const path=[];
+    if(!rough.finalEdges.top)path.push('M'+x1+' '+y1+' L'+x2+' '+y1);
+    if(!rough.finalEdges.right)path.push('M'+x2+' '+y1+' L'+x2+' '+y2);
+    if(!rough.finalEdges.bottom)path.push('M'+x1+' '+y2+' L'+x2+' '+y2);
+    if(!rough.finalEdges.left)path.push('M'+x1+' '+y1+' L'+x1+' '+y2);
+    const outline=svg('path',{d:path.join(' '),
      fill:'none',stroke:'#b3262c','stroke-width':'.23','stroke-dasharray':'1.1 .7',
      'class':'rough-cut-outline','data-panel':p.coordinate});
     outline.append(svg('title',{},p.coordinate+' rough '+fmt(rough.width)+' × '+fmt(rough.length)+
