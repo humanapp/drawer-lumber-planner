@@ -998,3 +998,33 @@ test('all inch measurement inputs accept fractions and persist numeric values',a
  await expect(page.getByLabel('Quantity',{exact:true})).toHaveAttribute('type','number');
  await expect(page.getByLabel('Sheet S1 quantity')).toHaveAttribute('type','number');
 });
+
+
+test('bottom PDF uses enlarged portrait diagram and keys every panel coordinate',async({page})=>{
+ const fs=require('node:fs/promises');
+ await page.goto('/');
+ const plan=await page.evaluate(()=>{
+  const parts=Array.from({length:27},(_,i)=>({
+   coordinate:'P'+(i+1)+'-BT',width:4.125,length:5.75,cutWidth:4.125,cutLength:5.75,
+   x:(i%6)*5,y:Math.floor(i/6)*6,thickness:.5,label:'Small panel '+i,rotated:false
+  }));
+  return {
+   cutOrder:'guillotine',sheets:[{label:'S2',width:48,length:96,thickness:.5,placements:parts}],
+   unassigned:[]
+  };
+ });
+ const bytes=await page.evaluate(async plan=>{
+  const blob=window.BottomPdf.makePdf(plan);
+  return Array.from(new Uint8Array(await blob.arrayBuffer()));
+ },plan);
+ const pdf=Buffer.from(bytes).toString('latin1');
+ expect(pdf).toContain('/MediaBox [0 0 612 792]');
+ const pages=Number(pdf.match(/\/Type \/Pages \/Kids \[[^\]]+\] \/Count (\d+)/)?.[1]);
+ expect(pages).toBe(2); // diagram + overflow key
+ for(let i=1;i<=27;i++)expect(pdf).toContain('('+(i)+'. P'+i+'-BT)');
+ expect(pdf).toContain('(PANEL KEY (continued from sheet diagram))');
+ // 48x96 panel plotted at roughly 285x570 points, rather than 110x220.
+ expect(pdf).toContain('285.00 570.00 re');
+ expect(pdf).toContain('(1. P1-BT)');
+ expect(pdf).toContain('(27. P27-BT)');
+});
