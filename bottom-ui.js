@@ -36,7 +36,7 @@ function inchInput(value,label,onChange){
 }
 function render(state,save){
  if(!Array.isArray(state.sheets))state.sheets=[];
- state.bottomSettings={wallThickness:.5,grooveDepth:.25,kerf:.125,allowRotation:false,...state.bottomSettings};
+ state.bottomSettings={wallThickness:.5,grooveDepth:.25,kerf:.125,factoryEdgeTrim:0,allowRotation:false,...state.bottomSettings};
  const commit=()=>{save();render(state,save)};
  const settings=$('bottomSettings'),inventory=$('bottomSheets'),summary=$('bottomSummary'),
   drawings=$('bottomLayouts'),list=$('bottomCutList');
@@ -45,7 +45,8 @@ function render(state,save){
  for(const [key,label,step] of [
   ['wallThickness','Drawer wall thickness (in)',.0625],
   ['grooveDepth','Bottom groove penetration (in)',.0625],
-  ['kerf','Panel cutting kerf (in)',.001]
+  ['kerf','Panel cutting kerf (in)',.001],
+  ['factoryEdgeTrim','Factory edge trim (in, per edge)',.03125]
  ]){
   const field=node('label',{class:'field'},label);
   const input=inchInput(state.bottomSettings[key],label,value=>{
@@ -117,11 +118,25 @@ function render(state,save){
   const instructions=ripFirst?
    'RIP FIRST: '+sheet.strips.length+' full-length strips parallel to grain; then crosscut the bottoms from each strip.':
    'Alternate guillotine layout used to fit more bottoms or reduce sheets; follow individual cuts.';
-  card.append(node('p',{class:'note'},instructions+' '+sheet.placements.length+' bottoms; diagram width horizontal and grain vertical.'));
+  card.append(node('p',{class:'note'},instructions+' '+sheet.placements.length+' bottoms; diagram width horizontal and grain vertical.'+
+   (sheet.trim?' Factory edge trim '+fmt(sheet.trim)+' on each edge.':'')));
   if(ripFirst)card.append(node('p',{class:'note'},sheet.strips.map(strip=>
    'R'+strip.index+': '+fmt(strip.width)+' wide × '+fmt(sheet.length)+' long; crosscut '+strip.placements.map(p=>fmt(p.cutLength)).join(', ')).join(' | ')));
   const image=svg('svg',{viewBox:'0 0 '+(sheet.width+4)+' '+(sheet.length+4),role:'img','aria-label':'Bottom layout for '+sheet.label});
   image.append(svg('rect',{x:2,y:2,width:sheet.width,height:sheet.length,fill:'#e8d8bb',stroke:'#806a49','stroke-width':.3}));
+  // The outer perimeter is scrap; all placed rectangles start inside this boundary.
+  if(sheet.trim>0){
+   const t=Math.min(sheet.trim,sheet.width/2,sheet.length/2);
+   for(const [x,y,w,h] of [
+    [2,2,sheet.width,t],
+    [2,2+sheet.length-t,sheet.width,t],
+    [2,2+t,t,Math.max(0,sheet.length-2*t)],
+    [2+sheet.width-t,2+t,t,Math.max(0,sheet.length-2*t)]
+   ])if(w>0&&h>0)image.append(svg('rect',{x,y,width:w,height:h,fill:'#b3b3b3',opacity:'.7'}));
+   if(sheet.usableWidth>0&&sheet.usableLength>0)
+    image.append(svg('rect',{x:2+sheet.trim,y:2+sheet.trim,width:sheet.usableWidth,height:sheet.usableLength,
+     fill:'none',stroke:'#6e6e6e','stroke-dasharray':'.8 .5','stroke-width':'.2'}));
+  }
 
   for(const [i,p] of sheet.placements.entries()){
    const x=p.x+2,y=p.y+2,w=p.cutWidth,h=p.cutLength;
