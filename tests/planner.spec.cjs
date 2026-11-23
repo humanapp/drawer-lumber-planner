@@ -1153,3 +1153,72 @@ test('rough margin warns when an outer panel edge lacks clearance',async({page})
  expect(outcome[1].fits).toBe(true);
  expect(outcome[1].bounds).toEqual({x:1.5,y:1.5,width:21,length:21});
 });
+
+
+test('wide kerf reserves half its width around EVERY outside panel edge',async({page})=>{
+ await page.goto('/');
+ const plan=await page.evaluate(()=>window.BottomSolver.solve({
+  groups:[{id:1,height:5,items:[
+   {id:2,code:'A',qty:1,width:12.5,depth:22.25},
+   {id:3,code:'B',qty:1,width:14.5,depth:18.25},
+   {id:4,code:'C',qty:1,width:11.5,depth:25.25},
+   {id:5,code:'D',qty:1,width:13.5,depth:20.25},
+   {id:6,code:'E',qty:1,width:15.5,depth:23.25}
+  ]}],
+  bottomSettings:{wallThickness:.5,grooveDepth:.25,kerf:1,factoryEdgeTrim:.25,allowRotation:false},
+  sheets:[{id:'S1',width:48,length:96,thickness:.25,qty:1}]
+ }));
+ expect(plan.placed).toBe(5);
+ expect(plan.unassigned).toHaveLength(0);
+ for(const sheet of plan.sheets){
+  expect(sheet.packingInset).toBe(.75);
+  expect(sheet.packingWidth).toBe(46.5);
+  expect(sheet.packingLength).toBe(94.5);
+ }
+ const errors=await page.evaluate(project=>{
+  const plan=window.BottomSolver.solve(project);
+  return plan.sheets.flatMap(sheet=>sheet.placements.filter(p=>
+   !window.BottomSolver.roughCutFor(p,sheet,plan.kerf).fits).map(p=>p.coordinate));
+ },{
+  groups:[{id:1,height:5,items:[
+   {id:2,code:'A',qty:1,width:12.5,depth:22.25},
+   {id:3,code:'B',qty:1,width:14.5,depth:18.25},
+   {id:4,code:'C',qty:1,width:11.5,depth:25.25},
+   {id:5,code:'D',qty:1,width:13.5,depth:20.25},
+   {id:6,code:'E',qty:1,width:15.5,depth:23.25}
+  ]}],
+  bottomSettings:{wallThickness:.5,grooveDepth:.25,kerf:1,factoryEdgeTrim:.25,allowRotation:false},
+  sheets:[{id:'S1',width:48,length:96,thickness:.25,qty:1}]
+ });
+ expect(errors).toEqual([]);
+});
+
+test('outer half-kerf margin reduces capacity only when it truly cannot fit',async({page})=>{
+ await page.goto('/');
+ const output=await page.evaluate(()=>{
+  function run(kerf,trim,width,depth){
+   const project={
+    groups:[{id:1,height:5,items:[{id:2,code:'A',qty:1,width:width+.5,depth:depth+.25}]}],
+    bottomSettings:{wallThickness:.5,grooveDepth:.25,kerf,factoryEdgeTrim:trim,allowRotation:false},
+    sheets:[{id:'S1',width:48,length:96,thickness:.25,qty:1}]
+   };
+   const plan=window.BottomSolver.solve(project);
+   return {placed:plan.placed,unassigned:plan.unassigned.length,
+    inset:plan.sheets[0].packingInset,
+    rough:plan.sheets[0].placements.map(p=>window.BottomSolver.roughCutFor(p,plan.sheets[0],kerf))};
+  }
+  return {
+   fits:run(1,.25,46.5,94.5),
+   fails:run(1,.25,46.53125,94.5),
+   noTrim:run(1,0,47,95),
+   legacy:run(0,0,48,96)
+  };
+ });
+ expect(output.fits.placed).toBe(1);
+ expect(output.fits.rough[0].fits).toBe(true);
+ expect(output.fails.unassigned).toBe(1);
+ expect(output.noTrim.placed).toBe(1);
+ expect(output.noTrim.inset).toBe(.5);
+ expect(output.legacy.placed).toBe(1);
+ expect(output.legacy.inset).toBe(0);
+});
