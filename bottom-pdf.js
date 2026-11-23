@@ -42,6 +42,24 @@ function makePdf(plan){
    stream+='0.36 0.42 0.47 RG\n0.5 w\n'+rect(px,py,pw,ph);
    if(pw>=42&&ph>=18)stream+='0.18 0.19 0.18 rg\n'+txt(px+3,py+ph/2,8,part.coordinate,true);
   }
+  // Faint full-sheet projections of cut boundaries to match the SVG.
+  // These are visual guides; they are not instructions to cut full width.
+  const verticalGuides=new Set(),horizontalGuides=new Set();
+  for(const part of rows){
+   const px=part.x+part.cutWidth,py=part.y+part.cutLength;
+   if(px>1e-6&&px<sheet.width-1e-6)verticalGuides.add(px.toFixed(5));
+   if(py>1e-6&&py<sheet.length-1e-6)horizontalGuides.add(py.toFixed(5));
+  }
+  stream+='0.77 0.77 0.77 RG\\n0.3 w\\n[2 2] 0 d\\n';
+  for(const value of verticalGuides){
+   const xx=x+Number(value)*scale;
+   stream+=xx.toFixed(2)+' '+(top-sl).toFixed(2)+' m '+xx.toFixed(2)+' '+top.toFixed(2)+' l S\\n';
+  }
+  for(const value of horizontalGuides){
+   const yy=top-Number(value)*scale;
+   stream+=x.toFixed(2)+' '+yy.toFixed(2)+' m '+(x+sw).toFixed(2)+' '+yy.toFixed(2)+' l S\\n';
+  }
+  stream+='[] 0 d\\n';
   y=top-sl-19;
   if(plan.cutOrder==='rip-first'){
    for(const strip of sheet.strips){
