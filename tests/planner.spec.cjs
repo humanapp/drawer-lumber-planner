@@ -728,10 +728,10 @@ test('crosscut PDF paginates many boards and reports unassigned panel coordinate
  }
 });
 
-test('fraction formatter rounds to sixteenths and exporter scripts are versioned',async({page})=>{
+test('fraction formatter rounds to thirty-seconds and exporter scripts are versioned',async({page})=>{
  await page.goto('/');
  const formats=await page.evaluate(()=>[12.5,5.25,6.125,12,5.3125,7.03,0.03].map(window.InchMeasurements.format));
- expect(formats).toEqual(['12-1/2"','5-1/4"','6-1/8"','12"','5-5/16"','7"','0"']);
+ expect(formats).toEqual(['12-1/2"','5-1/4"','6-1/8"','12"','5-5/16"','7-1/32"','1/32"']);
  for(const asset of ['measurements.js','inventory-pdf.js','crosscut-pdf.js']){
   await expect(page.locator('script[src^="'+asset+'?"]')).toHaveCount(1);
  }
@@ -878,4 +878,73 @@ test('sheet layout projects horizontal and vertical cut guides across entire she
  expect(lines.some(l=>l.y1===2&&l.y2===98)).toBe(true);
  expect(lines.some(l=>l.x1===2&&l.x2===50)).toBe(true);
  expect(lines.every(l=>l.opacity==='.42')).toBe(true);
+});
+
+
+test('mixed fractions parse, reduce, and round to the nearest thirty-second',async({page})=>{
+ await page.goto('/');
+ const parsed=await page.evaluate(()=>{
+  const m=window.InchMeasurements;
+  const samples=['5 1/2"','5/16','5-1/2', ' 2 31/32 ″ ','5.515625','7.03','.125','0"','1/0','2/1','-1/2','banana',''];
+  return {
+   samples:samples.map(s=>m.parse(s)),
+   edit:[5.5,.3125,2.96875,7.03,0].map(m.formatInput),
+   display:[5.5,.3125,2.96875,7.03,0].map(m.format),
+  };
+ });
+ expect(parsed.samples).toEqual([5.5,.3125,5.5,2.96875,5.53125,7.03125,.125,0,null,null,null,null,null]);
+ expect(parsed.edit).toEqual(['5 1/2"','5/16"','2 31/32"','7 1/32"','0"']);
+ expect(parsed.display).toEqual(['5-1/2"','5/16"','2-31/32"','7-1/32"','0"']);
+});
+
+test('drawer box dimensions accept fractional inches, remain fractions after blur/reload, and save numeric values',async({page})=>{
+ const project=structuredClone(sampleProject);
+ project.groups=[{id:1,height:5,items:[{id:2,code:'A',label:'Fraction drawer',qty:1,width:18.4,depth:20}]}];
+ await page.addInitScript(({key,project})=>{
+  if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+ },{key,project});
+ await page.goto('/');
+ await expect(page.getByLabel('Width',{exact:true})).toHaveValue('18 13/32"');
+ const height=page.getByLabel('Group height');
+ await height.fill('5 1/2"');
+ await height.press('Tab');
+ await expect(height).toHaveValue('5 1/2"');
+ const width=page.getByLabel('Width',{exact:true});
+ await width.fill('15/16');
+ await width.press('Tab');
+ await expect(width).toHaveValue('15/16"');
+ const depth=page.getByLabel('Depth',{exact:true});
+ await depth.fill('20.03');
+ await depth.press('Tab');
+ await expect(depth).toHaveValue('20 1/32"');
+ const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('drawer-lumber-planner-v1')));
+ expect(saved.groups[0].height).toBe(5.5);
+ expect(saved.groups[0].items[0].width).toBe(.9375);
+ expect(saved.groups[0].items[0].depth).toBe(20.03125);
+ expect(typeof saved.groups[0].items[0].width).toBe('number');
+ await expect(page.locator('#previews')).toContainText('15/16" W');
+ await page.reload();
+ await expect(page.getByLabel('Group height')).toHaveValue('5 1/2"');
+ await expect(page.getByLabel('Width',{exact:true})).toHaveValue('15/16"');
+ await expect(page.getByLabel('Depth',{exact:true})).toHaveValue('20 1/32"');
+ const invalid=page.getByLabel('Width',{exact:true});
+ await invalid.fill('6/0');
+ await invalid.press('Tab');
+ await expect(invalid).toHaveValue('15/16"');
+ expect((await page.evaluate(()=>JSON.parse(localStorage.getItem('drawer-lumber-planner-v1')))).groups[0].items[0].width).toBe(.9375);
+});
+
+test('legacy numeric drawer dimensions survive JSON import and render as fractions',async({page})=>{
+ await page.goto('/');
+ const project=structuredClone(sampleProject);
+ project.groups[0].height=5.5;
+ project.groups[0].items[0].width=18.3125;
+ project.groups[0].items[0].depth=20.03125;
+ page.once('dialog',d=>d.accept());
+ await page.locator('#projectFile').setInputFiles({
+  name:'fraction-compatible.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({project}))
+ });
+ await expect(page.getByLabel('Group height')).toHaveValue('5 1/2"');
+ await expect(page.getByLabel('Width',{exact:true})).toHaveValue('18 5/16"');
+ await expect(page.getByLabel('Depth',{exact:true})).toHaveValue('20 1/32"');
 });
