@@ -9,6 +9,31 @@ const download=(name,blob)=>{
  const url=URL.createObjectURL(blob),a=node('a',{href:url,download:name});document.body.append(a);a.click();a.remove();
  setTimeout(()=>URL.revokeObjectURL(url),1500);
 };
+function inchInput(value,label,onChange){
+ const input=node('input',{type:'text','aria-label':label});
+ input.inputMode='decimal';input.autocomplete='off';input.spellcheck=false;
+ input.title='Inches: 5 1/2", 5/16", or 5.5. Rounded to the nearest 1/32".';
+ input.value=root.InchMeasurements.formatInput(value);
+ let committed=Number(value);
+ const commit=()=>{
+  const parsed=root.InchMeasurements.parse(input.value);
+  if(parsed===null)return false;
+  if(parsed!==committed){committed=parsed;onChange(parsed)}
+  return true;
+ };
+ // A sheet edit updates the entire drawing and input set, so don't rerender
+ // on every keystroke. Commit on change/blur, preserving partial fractions.
+ input.onchange=()=>{
+  if(!commit())input.value=root.InchMeasurements.formatInput(committed);
+  else input.value=root.InchMeasurements.formatInput(committed);
+ };
+ input.onblur=()=>{
+  if(!commit())input.value=root.InchMeasurements.formatInput(committed);
+  else input.value=root.InchMeasurements.formatInput(committed);
+ };
+ input.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();input.blur()}};
+ return input;
+}
 function render(state,save){
  if(!Array.isArray(state.sheets))state.sheets=[];
  state.bottomSettings={wallThickness:.5,grooveDepth:.25,kerf:.125,allowRotation:false,...state.bottomSettings};
@@ -23,8 +48,9 @@ function render(state,save){
   ['kerf','Panel cutting kerf (in)',.001]
  ]){
   const field=node('label',{class:'field'},label);
-  const input=node('input',{type:'number',min:0,step,value:state.bottomSettings[key],'aria-label':label});
-  input.onchange=()=>{state.bottomSettings[key]=Math.max(0,Number(input.value)||0);commit()};
+  const input=inchInput(state.bottomSettings[key],label,value=>{
+   state.bottomSettings[key]=value;commit()
+  });
   field.append(input);settings.append(field);
  }
  const rotation=node('label',{class:'field'},'Allow 90° rotation (changes grain direction)');
@@ -61,8 +87,14 @@ function render(state,save){
   selector.onchange=()=>{sheet.thickness=Number(selector.value);commit()};
   row.append(selector);
   for(const [key,name,step] of [['qty','quantity',1],['width','width',.125],['length','length',.125]]){
-   const input=node('input',{type:'number',min:0,step,value:sheet[key],'aria-label':'Sheet '+sheet.id+' '+name});
-   input.onchange=()=>{sheet[key]=Number(input.value);commit()};row.append(input);
+   const label='Sheet '+sheet.id+' '+name;
+   if(key==='qty'){
+    const input=node('input',{type:'number',min:0,step:1,value:sheet[key],'aria-label':label});
+    input.onchange=()=>{sheet[key]=Math.max(0,Math.floor(Number(input.value)||0));commit()};
+    row.append(input);
+   }else{
+    row.append(inchInput(sheet[key],label,value=>{sheet[key]=value;commit()}));
+   }
   }
   const remove=node('button',{'aria-label':'Remove sheet '+sheet.id},'×');
   remove.onclick=()=>{state.sheets=state.sheets.filter(s=>s!==sheet);commit()};row.append(remove);
