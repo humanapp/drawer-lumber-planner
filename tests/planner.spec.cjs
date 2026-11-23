@@ -802,3 +802,41 @@ test('sheet inventory, settings, and PDF bottom cutting list persist',async({pag
  expect(pdf).toContain('(A1-BT)');
  expect(pdf).not.toContain('(19.25 x 29.50)');
 });
+
+
+test('bottom solver prioritizes full-length grain-parallel rips, then crosscuts within strips',async({page})=>{
+ const project=structuredClone(sampleProject);
+ project.groups=[
+  {id:1,height:5,items:[{id:2,code:'A',label:'Short',qty:2,width:20,depth:30}]},
+  {id:3,height:5,items:[{id:4,code:'B',label:'Narrow',qty:2,width:11,depth:30}]}
+ ];
+ // Sheet dimensions are intentionally reversed: grain follows the longer edge.
+ project.sheets=[{id:'S1',label:'Maple quarter',width:96,length:48,thickness:.25,qty:1}];
+ project.bottomSettings={widthDeduction:.5,depthDeduction:.5,kerf:.125,allowRotation:false};
+ await page.addInitScript(({key,project})=>{
+  if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+ },{key,project});
+ await page.goto('/');
+ const plan=await page.evaluate(()=>window.BottomSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+ expect(plan.cutOrder).toBe('rip-first');
+ expect(plan.placed).toBe(4);
+ expect(plan.usedSheets).toBe(1);
+ const sheet=plan.sheets[0];
+ expect([sheet.width,sheet.length]).toEqual([48,96]);
+ expect(sheet.strips).toHaveLength(2);
+ expect(sheet.strips.map(s=>s.width).sort((a,b)=>a-b)).toEqual([10.5,19.5]);
+ for(const strip of sheet.strips){
+  expect(strip.length).toBe(96);
+  expect(strip.placements).toHaveLength(2);
+  expect(strip.placements[0].x).toBe(strip.placements[1].x);
+  expect(strip.placements[0].y).toBe(0);
+  expect(strip.placements[1].y).toBe(29.625);
+ }
+ await expect(page.locator('#bottomLayouts')).toContainText('RIP FIRST');
+ await expect(page.locator('#bottomLayouts')).toContainText('full-length strips');
+ const fs=require('node:fs/promises');
+ const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Export bottom PDF'}).click()]);
+ const pdf=(await fs.readFile(await download.path())).toString('latin1');
+ expect(pdf).toContain('(RIP FIRST: full-length strips parallel to grain, then crosscut within each strip.)');
+ expect(pdf).toContain('full length');
+});
