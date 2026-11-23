@@ -47,12 +47,11 @@ function demands(project){
 function sheetsOf(project){
  const sheets=[];
  const trim=n(project.bottomSettings?.factoryEdgeTrim ?? 0);
- // Every finished edge needs half the modeled cutting corridor, including
- // the four outside edges. Internal panels already get a full kerf between
- // their finished boundaries. Thus the available nesting region is inset
- // by (factory trim + kerf/2) on every side.
+ // The sheet edge *after factory trimming* is a finished edge. Packing may
+ // begin on that edge without another half-kerf margin; a margin is required
+ // only on finished edges that do not meet the trimmed sheet boundary.
  const kerf=n(project.bottomSettings?.kerf ?? .125);
- const roughMargin=kerf/2,packingInset=round(trim+roughMargin);
+ const roughMargin=kerf/2,packingInset=trim;
  for(const [i,source] of (project.sheets||[]).entries()){
   // Sheet grain is assumed parallel to its longer dimension. Normalize the
   // diagram so full-length rips always run vertically.
@@ -75,6 +74,14 @@ function sheetsOf(project){
   });
  }
  return sheets;
+}
+function clearsFarEdges(sheet,x,y,width,length,kerf){
+ const half=kerf/2;
+ const right=sheet.width-sheet.trim-(x+width);
+ const bottom=sheet.length-sheet.trim-(y+length);
+ return right>=-EPS&&bottom>=-EPS&&
+  (right<=EPS||right+EPS>=half)&&
+  (bottom<=EPS||bottom+EPS>=half);
 }
 function split(space,piece,kerf,axis){
  const w=space.width-piece.width-kerf,l=space.length-piece.length-kerf;
@@ -115,6 +122,7 @@ function plan(project,mode){
     for(const rotated of (allowRotation?[false,true]:[false])){
      const width=rotated?part.length:part.width,length=rotated?part.width:part.length;
      if(width>free.width+EPS||length>free.length+EPS)continue;
+     if(!clearsFarEdges(sheet,free.x,free.y,width,length,kerf))continue;
      for(const axis of [0,1]){
       const offcuts=split(free,{width,length},kerf,axis);
       const residual=offcuts.reduce((sum,r)=>sum+r.width*r.length,0);
@@ -177,6 +185,7 @@ function ripFirstPlan(project,mode){
      if(Math.abs(strip.width-width)>EPS)continue;
      const start=strip.nextY===0?0:strip.nextY;
      if(start+length>sheet.packingInset+sheet.packingLength+EPS)continue;
+     if(!clearsFarEdges(sheet,strip.x,start,width,length,kerf))continue;
      const slack=sheet.packingInset+sheet.packingLength-(start+length);
      const score=slack+(rotated?200:0)+si*.001;
      if(!best||score<best.score-EPS)
@@ -185,6 +194,7 @@ function ripFirstPlan(project,mode){
     const previous=sheet.strips[sheet.strips.length-1];
     const x=previous?round(previous.x+previous.width+kerf):sheet.packingInset;
     if(x+width>sheet.packingInset+sheet.packingWidth+EPS)continue;
+    if(!clearsFarEdges(sheet,x,sheet.packingInset,width,length,kerf))continue;
     // Prefer already used sheets over opening a new sheet, and prefer
     // tighter lane packing when two equivalent new strips are possible.
     const score=100000+(sheet.placements.length?0:100000)+
@@ -240,16 +250,34 @@ function ripFirstPlan(project,mode){
 // blank extends half that corridor past its finished dimensions.
 function roughCutFor(part,sheet,kerf){
  const margin=n(kerf)/2,trim=n(sheet.trim),w=n(sheet.width),h=n(sheet.length);
- const x=n(part.x)-margin,y=n(part.y)-margin,
-  width=n(part.cutWidth)+2*margin,length=n(part.cutLength)+2*margin;
- const bounds={x:round(x),y:round(y),width:round(width),length:round(length)};
- const limits={left:trim,top:trim,right:w-trim,bottom:h-trim};
- const clipped={
-  left:x<limits.left-EPS,right:x+width>limits.right+EPS,
-  top:y<limits.top-EPS,bottom:y+length>limits.bottom+EPS
+ const x=n(part.x),y=n(part.y),cw=n(part.cutWidth),cl=n(part.cutLength);
+ const finish={left:trim,top:trim,right:w-trim,bottom:h-trim};
+ // Edges flush with the trimmed sheet are final: no track-saw cut there.
+ const finalEdges={
+  left:Math.abs(x-finish.left)<=EPS,
+  right:Math.abs(x+cw-finish.right)<=EPS,
+  top:Math.abs(y-finish.top)<=EPS,
+  bottom:Math.abs(y+cl-finish.bottom)<=EPS
  };
- return {bounds,margin,clipped,fits:Object.values(clipped).every(v=>!v),
-  width:round(n(part.width)+2*margin),length:round(n(part.length)+2*margin)};
+ const allowances={
+  left:finalEdges.left?0:margin,right:finalEdges.right?0:margin,
+  top:finalEdges.top?0:margin,bottom:finalEdges.bottom?0:margin
+ };
+ const bounds={
+  x:round(x-allowances.left),y:round(y-allowances.top),
+  width:round(cw+allowances.left+allowances.right),
+  length:round(cl+allowances.top+allowances.bottom)
+ };
+ const clipped={
+  left:bounds.x<finish.left-EPS,
+  right:bounds.x+bounds.width>finish.right+EPS,
+  top:bounds.y<finish.top-EPS,
+  bottom:bounds.y+bounds.length>finish.bottom+EPS
+ };
+ return {bounds,margin,allowances,finalEdges,clipped,
+  fits:Object.values(clipped).every(v=>!v),
+  width:round(n(part.width)+allowances.left+allowances.right),
+  length:round(n(part.length)+allowances.top+allowances.bottom)};
 }
 function solve(project){
  let best=null;
