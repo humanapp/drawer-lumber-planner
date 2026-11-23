@@ -20,11 +20,14 @@ function makePdf(plan){
    (sheet.trim?'  EDGE TRIM '+fmt(sheet.trim):'')+(continuation?' (continued)':''),true);
  }
  const sheets=(plan?.sheets||[]).filter(sheet=>sheet.placements.length);
- const numberedLegend=(rows,start,end,atY=650)=>{
+ const numberedLegend=(rows,sheet,start,end,atY=650)=>{
   let result='0.13 0.18 0.23 rg\n'+txt(LEGEND_X,675,11,'PANEL KEY',true);
   for(let i=start;i<end;i++){
    const part=rows[i],y=atY-(i-start)*LEGEND_ROW;
+   const rough=root.BottomSolver.roughCutFor(part,sheet,plan.kerf);
    result+='0.15 0.19 0.23 rg\n'+txt(LEGEND_X,y,10,(i+1)+'. '+part.coordinate,true);
+   result+='0.55 0.1 0.12 rg\n'+txt(LEGEND_X+105,y,7.5,
+    'R '+fmt(rough.width)+' x '+fmt(rough.length)+(rough.fits?'':' *'));
    result+='0.37 0.4 0.44 rg\n'+txt(LEGEND_X+13,y-11,8,fmt(part.width)+' x '+fmt(part.length))+
     txt(LEGEND_X+126,y-11,7,'x '+fmt(part.x)+' / y '+fmt(part.y));
   }
@@ -42,6 +45,8 @@ function makePdf(plan){
   out+='0.35 0.38 0.42 rg\n'+txt(LEFT,688,9,
    ripFirst?'RIP FIRST: full-length strips parallel to grain, then crosscut within each strip.':
     'Alternate guillotine layout; see panel positions.');
+  if(plan.kerf>0)out+='0.55 0.1 0.12 rg\n'+txt(LEFT,676,8,
+   'RED DASH: rough cut at '+fmt(plan.kerf/2)+' outside finished edges. R = rough size; * = insufficient edge margin.');
   out+='0.95 0.96 0.97 rg\n'+rect(left,top-sh,sw,sh,true);
   // Shade the unusable factory-edge perimeter in the physical sheet diagram.
   if(sheet.trim>0){
@@ -73,6 +78,18 @@ function makePdf(plan){
     out+='0.09 0.13 0.16 rg\n'+txt(px+4,py+ph/2,10,marker,true);
    }
   }
+  // Rough-cut envelopes are the centerlines of the simulated wide
+  // kerf, half a kerf outside every finished panel. Clip at the sheet edge.
+  if(plan.kerf>0){
+   out+='q\n'+rect(left,top-sh,sw,sh).replace('S\n','W n\n');
+   out+='0.7 0.12 0.16 RG\n0.9 w\n[4 3] 0 d\n';
+   for(const part of rows){
+    const rough=root.BottomSolver.roughCutFor(part,sheet,plan.kerf),r=rough.bounds;
+    out+=rect(left+r.x*scale,top-(r.y+r.length)*scale,
+     r.width*scale,r.length*scale);
+   }
+   out+='[] 0 d\nQ\n';
+  }
   // Subtle edge-to-edge cut projections; not extra full-sheet saw cuts.
   const xs=new Set(),ys=new Set();
   for(const p of rows){
@@ -84,7 +101,7 @@ function makePdf(plan){
   for(const v of xs){const x=left+Number(v)*scale;out+=line(x,top-sh,x,top);}
   for(const v of ys){const y=top-Number(v)*scale;out+=line(left,y,left+sw,y);}
   out+='[] 0 d\n0.45 0.48 0.5 RG\n0.9 w\n'+rect(left,top-sh,sw,sh);
-  out+=numberedLegend(rows,0,Math.min(LEGEND_ROWS,rows.length));
+  out+=numberedLegend(rows,sheet,0,Math.min(LEGEND_ROWS,rows.length));
   if(ripFirst){
    const strips=sheet.strips||[];
    // Compact, cut-order summary below the legend when it fits.
@@ -102,7 +119,7 @@ function makePdf(plan){
   for(let start=LEGEND_ROWS;start<rows.length;start+=LEGEND_ROWS){
    pages.push(pageHeader()+title(sheet,true)+
     '0.36 0.39 0.43 rg\n'+txt(LEFT,685,10,'PANEL KEY (continued from sheet diagram)')+
-    numberedLegend(rows,start,Math.min(rows.length,start+LEGEND_ROWS)));
+    numberedLegend(rows,sheet,start,Math.min(rows.length,start+LEGEND_ROWS)));
   }
  }
  if(plan?.unassigned?.length){
