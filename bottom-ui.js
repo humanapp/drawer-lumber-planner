@@ -144,8 +144,15 @@ function render(state,save){
    const x=p.x+2,y=p.y+2,w=p.cutWidth,h=p.cutLength;
    const group=svg('g');
    group.append(svg('rect',{x,y,width:w,height:h,fill:i%2?'#b6d2e4':'#b9d8bf',stroke:'#526d68','stroke-width':.2}));
-   group.append(svg('title',{},p.coordinate+' · '+fmt(p.width)+' × '+fmt(p.length)+(p.rotated?' (rotated)':'')));
-   if(w>=9&&h>=8){
+   const rough=root.BottomSolver.roughCutFor(p,sheet,plan.kerf);
+   group.append(svg('title',{},p.coordinate+' · finished '+fmt(p.width)+' × '+fmt(p.length)+
+    ' · rough '+fmt(rough.width)+' × '+fmt(rough.length)+(p.rotated?' (rotated)':'')+
+    (rough.fits?'':' · insufficient edge allowance')));
+   if(w>=12&&h>=11&&plan.kerf>0){
+    group.append(svg('text',{x:x+w/2,y:y+h/2-3,'text-anchor':'middle','font-size':Math.min(2.35,w/6),fill:'#22343a'},p.coordinate));
+    group.append(svg('text',{x:x+w/2,y:y+h/2-.1,'text-anchor':'middle','font-size':Math.min(1.65,w/12),fill:'#22343a'},'F '+fmt(p.width)+' × '+fmt(p.length)));
+    group.append(svg('text',{x:x+w/2,y:y+h/2+2.6,'text-anchor':'middle','font-size':Math.min(1.65,w/12),fill:'#973137'},'R '+fmt(rough.width)+' × '+fmt(rough.length)));
+   }else if(w>=9&&h>=8){
     group.append(svg('text',{x:x+w/2,y:y+h/2-1,'text-anchor':'middle','font-size':Math.min(2.5,w/6),fill:'#22343a'},p.coordinate));
     group.append(svg('text',{x:x+w/2,y:y+h/2+2,'text-anchor':'middle','font-size':Math.min(1.9,w/11),fill:'#22343a'},fmt(p.width)+' × '+fmt(p.length)));
    }
