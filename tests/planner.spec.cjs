@@ -736,3 +736,69 @@ test('fraction formatter rounds to sixteenths and exporter scripts are versioned
   await expect(page.locator('script[src^="'+asset+'?"]')).toHaveCount(1);
  }
 });
+
+test('bottom solver derives conventional drawer sizes and matches sheet thickness',async({page})=>{
+ const project=structuredClone(sampleProject);
+ project.groups=[
+  {id:1,height:5,items:[{id:2,code:'A',label:'Shallow',qty:2,width:20,depth:30}]},
+  {id:3,height:7,items:[{id:4,code:'B',label:'Deep',qty:1,width:20,depth:30}]},
+  {id:5,height:11,items:[{id:6,code:'C',label:'Upright',qty:1,width:20,depth:10,vertical:true}]}
+ ];
+ project.bottomSettings={widthDeduction:.5,depthDeduction:.5,kerf:.125,allowRotation:false};
+ project.sheets=[{id:'S1',label:'Quarter',width:48,length:96,thickness:.25,qty:1}];
+ await page.addInitScript(({key,project})=>localStorage.setItem(key,JSON.stringify(project)),{key,project});
+ await page.goto('/');
+ const plan=await page.evaluate(()=>window.BottomSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
+ expect(plan.parts.map(p=>[p.coordinate,p.width,p.length,p.thickness])).toEqual([
+  ['A1-BT',19.5,29.5,.25],['A2-BT',19.5,29.5,.25],['B1-BT',19.5,29.5,.5]
+ ]);
+ expect(plan.placed).toBe(2);
+ expect(plan.unassigned.map(p=>p.coordinate)).toEqual(['B1-BT']);
+ expect(plan.skippedVertical).toBe(1);
+ await expect(page.getByRole('heading',{name:'Drawer bottom sheet cutting solver'})).toBeVisible();
+ await expect(page.locator('#bottomSummary')).toContainText('2 / 3');
+ await expect(page.locator('#bottomLayouts svg')).toHaveCount(1);
+ await expect(page.locator('#bottomCutList')).toContainText('19-1/2" × 29-1/2"');
+});
+
+test('bottom nesting respects kerf and keeps placed rectangles disjoint',async({page})=>{
+ await page.goto('/');
+ const outcome=await page.evaluate(()=>{
+  const project={
+   groups:[{id:1,height:5,items:[{id:2,code:'A',label:'Bottoms',qty:4,width:20.5,depth:20.5}]}],
+   bottomSettings:{widthDeduction:.5,depthDeduction:.5,kerf:.25,allowRotation:false},
+   sheets:[{id:'S1',width:41,length:41,thickness:.25,qty:1}]
+  };
+  return window.BottomSolver.solve(project);
+ });
+ expect(outcome.placed).toBe(4);
+ const placements=outcome.sheets[0].placements;
+ for(let i=0;i<placements.length;i++)for(let j=i+1;j<placements.length;j++){
+  const a=placements[i],b=placements[j];
+  expect(a.x+a.cutWidth+.25<=b.x+1e-6||b.x+b.cutWidth+.25<=a.x+1e-6||
+   a.y+a.cutLength+.25<=b.y+1e-6||b.y+b.cutLength+.25<=a.y+1e-6).toBe(true);
+ }
+});
+
+test('sheet inventory, settings, and PDF bottom cutting list persist',async({page})=>{
+ const fs=require('node:fs/promises');
+ const project=structuredClone(sampleProject);
+ project.groups=[{id:1,height:5,items:[{id:2,code:'A',qty:1,width:20,depth:30,label:'Utensils'}]}];
+ await page.addInitScript(({key,project})=>localStorage.setItem(key,JSON.stringify(project)),{key,project});
+ await page.goto('/');
+ await page.getByRole('button',{name:'+ Add sheet'}).click();
+ await page.getByLabel('Sheet S1 width').fill('48');
+ await page.getByLabel('Sheet S1 width').press('Tab');
+ await page.getByLabel('Bottom width deduction (in)').fill('0.75');
+ await page.getByLabel('Bottom width deduction (in)').press('Tab');
+ await page.reload();
+ await expect(page.getByLabel('Sheet S1 width')).toHaveValue('48');
+ await expect(page.getByLabel('Bottom width deduction (in)')).toHaveValue('0.75');
+ await expect(page.locator('#bottomCutList')).toContainText('19-1/4" × 29-1/2"');
+ const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Export bottom PDF'}).click()]);
+ expect(download.suggestedFilename()).toBe('drawer-bottom-cutting-plan.pdf');
+ const pdf=(await fs.readFile(await download.path())).toString('latin1');
+ expect(pdf).toContain('(19-1/4" x 29-1/2")');
+ expect(pdf).toContain('(A1-BT)');
+ expect(pdf).not.toContain('(19.25 x 29.50)');
+});
