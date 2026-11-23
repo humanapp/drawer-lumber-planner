@@ -81,9 +81,20 @@ function render(state,save){
   if(!sheet.placements.length)continue;
   const card=node('div',{class:'bottom-sheet-card'});
   card.append(node('strong',{},sheet.label+' — '+fmt(sheet.width)+' × '+fmt(sheet.length)+' — '+fmt(sheet.thickness)+' thick'));
-  card.append(node('p',{class:'note'},sheet.placements.length+' bottoms; '+sheet.free.length+' available rectangular offcuts. Diagram: sheet width horizontally; grain along vertical length.'));
+  const ripFirst=plan.cutOrder==='rip-first';
+  const instructions=ripFirst?
+   'RIP FIRST: '+sheet.strips.length+' full-length strips parallel to grain; then crosscut the bottoms from each strip.':
+   'Alternate guillotine layout used to fit more bottoms or reduce sheets; follow individual cuts.';
+  card.append(node('p',{class:'note'},instructions+' '+sheet.placements.length+' bottoms; diagram width horizontal and grain vertical.'));
+  if(ripFirst)card.append(node('p',{class:'note'},sheet.strips.map(strip=>
+   'R'+strip.index+': '+fmt(strip.width)+' wide × '+fmt(sheet.length)+' long; crosscut '+strip.placements.map(p=>fmt(p.cutLength)).join(', ')).join(' | ')));
   const image=svg('svg',{viewBox:'0 0 '+(sheet.width+4)+' '+(sheet.length+4),role:'img','aria-label':'Bottom layout for '+sheet.label});
   image.append(svg('rect',{x:2,y:2,width:sheet.width,height:sheet.length,fill:'#e8d8bb',stroke:'#806a49','stroke-width':.3}));
+  if(ripFirst)for(const strip of sheet.strips){
+   const line=svg('line',{x1:strip.x+2,y1:2,x2:strip.x+2,y2:sheet.length+2,
+    stroke:'#725b3c','stroke-width':.18,'stroke-dasharray':'1 .6'});
+   image.append(line);
+  }
   for(const [i,p] of sheet.placements.entries()){
    const x=p.x+2,y=p.y+2,w=p.cutWidth,h=p.cutLength;
    const group=svg('g');
