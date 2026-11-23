@@ -118,8 +118,10 @@ function render(state,save){
   const instructions=ripFirst?
    'RIP FIRST: '+sheet.strips.length+' full-length strips parallel to grain; then crosscut the bottoms from each strip.':
    'Alternate guillotine layout used to fit more bottoms or reduce sheets; follow individual cuts.';
+  const roughMargin=plan.kerf/2;
   card.append(node('p',{class:'note'},instructions+' '+sheet.placements.length+' bottoms; diagram width horizontal and grain vertical.'+
-   (sheet.trim?' Factory edge trim '+fmt(sheet.trim)+' on each edge.':'')));
+   (sheet.trim?' Factory edge trim '+fmt(sheet.trim)+' on each edge.':'')+
+   (plan.kerf>0?' Red dashed outlines = track-saw rough blanks, '+fmt(roughMargin)+' extra per edge.':'')));
   if(ripFirst)card.append(node('p',{class:'note'},sheet.strips.map(strip=>
    'R'+strip.index+': '+fmt(strip.width)+' wide × '+fmt(sheet.length)+' long; crosscut '+strip.placements.map(p=>fmt(p.cutLength)).join(', ')).join(' | ')));
   const image=svg('svg',{viewBox:'0 0 '+(sheet.width+4)+' '+(sheet.length+4),role:'img','aria-label':'Bottom layout for '+sheet.label});
@@ -149,6 +151,33 @@ function render(state,save){
    }
    image.append(group);
   }
+  // Rough blanks extend by half the simulated saw-kerf corridor on every
+  // edge. Red dashed paths mark the intended track-saw centerlines.
+  // Crop to the physical sheet; report any missing allowance at trimmed edges.
+  if(plan.kerf>0){
+   const clipId='rough-sheet-'+String(sheet.id).replace(/[^a-zA-Z0-9_-]/g,'_');
+   const defs=svg('defs'),clip=svg('clipPath',{id:clipId});
+   clip.append(svg('rect',{x:2,y:2,width:sheet.width,height:sheet.length}));
+   defs.append(clip);image.append(defs);
+   const roughGroup=svg('g',{'class':'rough-cut-guides','aria-label':'Rough-cut track-saw centerlines',
+    'clip-path':'url(#'+clipId+')'});
+   for(const p of sheet.placements){
+    const rough=root.BottomSolver.roughCutFor(p,sheet,plan.kerf),r=rough.bounds;
+    const outline=svg('rect',{x:r.x+2,y:r.y+2,width:r.width,height:r.length,
+     fill:'none',stroke:'#b3262c','stroke-width':'.23','stroke-dasharray':'1.1 .7',
+     'class':'rough-cut-outline','data-panel':p.coordinate});
+    outline.append(svg('title',{},p.coordinate+' rough '+fmt(rough.width)+' × '+fmt(rough.length)+
+     (rough.fits?'':' — insufficient edge allowance')));
+    roughGroup.append(outline);
+   }
+   image.append(roughGroup);
+   const insufficient=sheet.placements.filter(p=>!root.BottomSolver.roughCutFor(p,sheet,plan.kerf).fits);
+   if(insufficient.length){
+    card.append(node('p',{class:'warn'},
+     'Rough-cut edge clearance insufficient for '+insufficient.length+' panel(s): '+
+     insufficient.map(p=>p.coordinate).join(', ')+'. The 1/2-kerf rough margin extends into the trimmed-off edge or outside the usable sheet.'));
+   }
+  }
   // Project cut positions across the full sheet as low-contrast alignment
   // guides; the colored panel borders remain the actual cut geometry.
   const verticalGuides=new Set(),horizontalGuides=new Set();
@@ -175,11 +204,14 @@ function render(state,save){
  if(plan.placed){
   const table=node('table',{class:'bottom-table'});
   const header=node('tr');
-  for(const title of ['Panel','Drawer','Thickness','Bottom W × D','Sheet','X / Y','Rotated'])header.append(node('th',{},title));
+  for(const title of ['Panel','Drawer','Thickness','Finished W × D','Rough W × D','Sheet','X / Y','Rotated'])header.append(node('th',{},title));
   table.append(header);
   for(const sheet of plan.sheets)for(const p of sheet.placements){
    const row=node('tr');
-   for(const value of [p.coordinate,p.label,fmt(p.thickness),fmt(p.width)+' × '+fmt(p.length),sheet.label,fmt(p.x)+' / '+fmt(p.y),p.rotated?'90°':'—'])row.append(node('td',{},value));
+   const rough=root.BottomSolver.roughCutFor(p,sheet,plan.kerf);
+   for(const value of [p.coordinate,p.label,fmt(p.thickness),fmt(p.width)+' × '+fmt(p.length),
+    fmt(rough.width)+' × '+fmt(rough.length)+(rough.fits?'':' *'),sheet.label,
+    fmt(p.x)+' / '+fmt(p.y),p.rotated?'90°':'—'])row.append(node('td',{},value));
    table.append(row);
   }
   list.append(table);
