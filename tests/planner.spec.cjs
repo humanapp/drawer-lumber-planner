@@ -784,7 +784,7 @@ test('sheet inventory, settings, and PDF bottom cutting list persist',async({pag
  const fs=require('node:fs/promises');
  const project=structuredClone(sampleProject);
  project.groups=[{id:1,height:5,items:[{id:2,code:'A',qty:1,width:20,depth:30,label:'Utensils'}]}];
- await page.addInitScript(({key,project})=>localStorage.setItem(key,JSON.stringify(project)),{key,project});
+ await page.addInitScript(({key,project})=>{if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project))},{key,project});
  await page.goto('/');
  await page.getByRole('button',{name:'+ Add sheet'}).click();
  await page.getByLabel('Sheet S1 width').fill('48');
