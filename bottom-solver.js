@@ -224,6 +224,22 @@ function ripFirstPlan(project,mode){
   kerf,allowRotation,cutOrder:'rip-first',
   skippedVertical:0};
 }
+// A simulated wide "kerf" is the corridor reserved for roughing out panels.
+// The track-saw centerline lies halfway between finished edges; each rough
+// blank extends half that corridor past its finished dimensions.
+function roughCutFor(part,sheet,kerf){
+ const margin=n(kerf)/2,trim=n(sheet.trim),w=n(sheet.width),h=n(sheet.length);
+ const x=n(part.x)-margin,y=n(part.y)-margin,
+  width=n(part.cutWidth)+2*margin,length=n(part.cutLength)+2*margin;
+ const bounds={x:round(x),y:round(y),width:round(width),length:round(length)};
+ const limits={left:trim,top:trim,right:w-trim,bottom:h-trim};
+ const clipped={
+  left:x<limits.left-EPS,right:x+width>limits.right+EPS,
+  top:y<limits.top-EPS,bottom:y+length>limits.bottom+EPS
+ };
+ return {bounds,margin,clipped,fits:Object.values(clipped).every(v=>!v),
+  width:round(n(part.width)+2*margin),length:round(n(part.length)+2*margin)};
+}
 function solve(project){
  let best=null;
  const better=(a,b)=>!b||a.placed>b.placed||
@@ -245,5 +261,5 @@ function solve(project){
  }
  return best;
 }
-root.BottomSolver={solve,demands,sheetsOf};
+root.BottomSolver={solve,demands,sheetsOf,roughCutFor};
 })(typeof window!=='undefined'?window:globalThis);
