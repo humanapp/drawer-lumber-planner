@@ -40,7 +40,7 @@ test('solver assumptions and drawer edits survive reload', async ({ page }) => {
   await page.getByLabel('Drawer identifier').first().fill('Main bank');
   await page.reload();
   await expect(page.getByLabel('Purchased lumber profile')).toHaveCount(0);
-  await expect(page.getByLabel('Saw kerf (in)')).toHaveValue('0.1');
+  await expect(page.getByLabel('Saw kerf (in)')).toHaveValue('3/32"');
   await expect(page.getByLabel('Board width (in)')).toHaveCount(0);
   await expect(page.getByLabel('Board length (ft)')).toHaveCount(0);
   await expect(page.getByLabel('4/4 SAB price ($/BF)')).toHaveCount(0);
@@ -249,7 +249,7 @@ test('older saved projects default minimum glue-up strip to 2 inches', async ({ 
   await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('2');
   await page.getByLabel('Minimum glue-up strip width (in)').fill('2.5');
   await page.reload();
-  await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('2.5');
+  await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('2 1/2"');
 });
 
 
@@ -401,7 +401,7 @@ test('clicking full-width crosscut background selects its first part and width l
     if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
   },{key,project});
   await page.goto('/');
-  await expect(page.getByLabel('Extra panel width (in)')).toHaveValue('0.25');
+  await expect(page.getByLabel('Extra panel width (in)')).toHaveValue('1/4"');
   await expect(page.getByLabel('Extra width / strip (in)')).toHaveCount(0);
   const segment=page.locator('#boardLayouts .board-segment').first();
   await segment.click({position:{x:2,y:2}});
@@ -413,7 +413,7 @@ test('clicking full-width crosscut background selects its first part and width l
   await expect(page.locator('.part-face.is-highlighted')).toHaveCount(0);
   await page.getByLabel('Extra panel width (in)').fill('0.375');
   await page.reload();
-  await expect(page.getByLabel('Extra panel width (in)')).toHaveValue('0.375');
+  await expect(page.getByLabel('Extra panel width (in)')).toHaveValue('3/8"');
 });
 
 
@@ -793,7 +793,7 @@ test('sheet inventory, settings, and PDF bottom cutting list persist',async({pag
  await page.getByLabel('Drawer wall thickness (in)').press('Tab');
  await page.reload();
  await expect(page.getByLabel('Sheet S1 width')).toHaveValue('48');
- await expect(page.getByLabel('Drawer wall thickness (in)')).toHaveValue('0.625');
+ await expect(page.getByLabel('Drawer wall thickness (in)')).toHaveValue('5/8"');
  await expect(page.locator('#bottomCutList')).toContainText('19-1/4" × 29-5/8"');
  const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Export bottom PDF'}).click()]);
  expect(download.suggestedFilename()).toBe('drawer-bottom-cutting-plan.pdf');
@@ -947,4 +947,54 @@ test('legacy numeric drawer dimensions survive JSON import and render as fractio
  await expect(page.getByLabel('Group height')).toHaveValue('5 1/2"');
  await expect(page.getByLabel('Width',{exact:true})).toHaveValue('18 5/16"');
  await expect(page.getByLabel('Depth',{exact:true})).toHaveValue('20 1/32"');
+});
+
+
+test('all inch measurement inputs accept fractions and persist numeric values',async({page})=>{
+ const project=structuredClone(sampleProject);
+ project.inventory=[{id:'B1',label:'Maple board',width:8,length:96}];
+ project.sheets=[{id:'S1',label:'Maple plywood',width:48,length:96,thickness:.25,qty:1}];
+ project.bottomSettings={wallThickness:.5,grooveDepth:.25,kerf:.125,allowRotation:false};
+ await page.addInitScript(({key,project})=>{
+  if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+ },{key,project});
+ await page.goto('/');
+ const changes=[
+  ['Saw kerf (in)','1/8',.125],
+  ['Total edge trim (in)','5/16',.3125],
+  ['Extra length / part (in)','3 1/2',3.5],
+  ['Extra panel width (in)','7/32',.21875],
+  ['Minimum glue-up strip width (in)','2 3/4',2.75],
+  ['Board B1 width','8 5/16',8.3125],
+  ['Board B1 length','95 31/32',95.96875],
+  ['Drawer wall thickness (in)','5/8',.625],
+  ['Bottom groove penetration (in)','3/16',.1875],
+  ['Panel cutting kerf (in)','3/32',.09375],
+  ['Sheet S1 width','47 15/16',47.46875],
+  ['Sheet S1 length','95 7/8',95.875]
+ ];
+ for(const [label,value] of changes){
+  const field=page.getByLabel(label,{exact:true});
+  await expect(field).toHaveAttribute('type','text');
+  await field.fill(value);
+  await field.press('Tab');
+  const expected=await page.evaluate(v=>window.InchMeasurements.formatInput(window.InchMeasurements.parse(v)),value);
+  await expect(page.getByLabel(label,{exact:true})).toHaveValue(expected);
+ }
+ const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('drawer-lumber-planner-v1')));
+ const values=[
+  saved.settings.kerf,saved.settings.edgeTrim,saved.settings.endExtra,saved.settings.widthExtra,
+  saved.settings.minGlueWidth,saved.inventory[0].width,saved.inventory[0].length,
+  saved.bottomSettings.wallThickness,saved.bottomSettings.grooveDepth,saved.bottomSettings.kerf,
+  saved.sheets[0].width,saved.sheets[0].length
+ ];
+ expect(values).toEqual(changes.map(c=>c[2]));
+ expect(values.every(v=>typeof v==='number')).toBe(true);
+ await page.reload();
+ for(const [label,value] of changes){
+  const expected=await page.evaluate(v=>window.InchMeasurements.formatInput(window.InchMeasurements.parse(v)),value);
+  await expect(page.getByLabel(label,{exact:true})).toHaveValue(expected);
+ }
+ await expect(page.getByLabel('Quantity',{exact:true})).toHaveAttribute('type','number');
+ await expect(page.getByLabel('Sheet S1 quantity')).toHaveAttribute('type','number');
 });
