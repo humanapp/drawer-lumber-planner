@@ -18,9 +18,9 @@ function render(state,save){
  if(!settings)return;
  for(const el of [settings,inventory,summary,drawings,list])el.replaceChildren();
  for(const [key,label,step] of [
-  ['widthDeduction','Bottom width deduction (in)',.0625],
-  ['depthDeduction','Bottom depth deduction (in)',.0625],
-  ['kerf','Sheet saw kerf (in)',.001]
+  ['widthDeduction','Bottom side-to-side deduction (in)',.0625],
+  ['depthDeduction','Bottom front-to-back deduction (in)',.0625],
+  ['kerf','Panel cutting kerf (in)',.001]
  ]){
   const field=node('label',{class:'field'},label);
   const input=node('input',{type:'number',min:0,step,value:state.bottomSettings[key],'aria-label':label});
