@@ -1089,3 +1089,67 @@ test('factory edge trim field accepts fractions and shades web/PDF scrap bands',
  await page.reload();
  await expect(page.getByLabel('Factory edge trim (in, per edge)')).toHaveValue('3/8"');
 });
+
+
+test('rough-cut centerlines mark half of simulated wide kerf and list oversize blanks',async({page})=>{
+ const project=structuredClone(sampleProject);
+ project.groups=[{id:1,height:5,items:[{id:2,code:'A',label:'Track saw',qty:2,width:20.5,depth:20.25}]}];
+ project.bottomSettings={wallThickness:.5,grooveDepth:.25,kerf:1,factoryEdgeTrim:.25,allowRotation:false};
+ project.sheets=[{id:'S1',label:'Sheet',width:48,length:96,thickness:.25,qty:1}];
+ await page.addInitScript(({key,project})=>{
+  if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+ },{key,project});
+ await page.goto('/');
+ const geometry=await page.evaluate(()=>{
+  const plan=window.BottomSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1')));
+  const sheet=plan.sheets[0];
+  return {count:plan.placed,kerf:plan.kerf,rough:sheet.placements.map(p=>({
+   coordinate:p.coordinate,finish:[p.width,p.length],
+   cut:window.BottomSolver.roughCutFor(p,sheet,plan.kerf)
+  }))};
+ });
+ expect(geometry.count).toBe(2);
+ expect(geometry.kerf).toBe(1);
+ for(const p of geometry.rough){
+  expect(p.finish).toEqual([20,20]);
+  expect([p.cut.width,p.cut.length]).toEqual([21,21]);
+  expect(p.cut.margin).toBe(.5);
+  expect(p.cut.bounds.width).toBe(21);
+  expect(p.cut.bounds.length).toBe(21);
+ }
+ // The two kerf corridors meet exactly at the shared track-saw centerline.
+ const a=geometry.rough[0].cut.bounds,b=geometry.rough[1].cut.bounds;
+ if(Math.abs(a.x-b.x)<1e-6)expect(Math.abs(a.y+a.length-b.y)<1e-6 ||
+  Math.abs(b.y+b.length-a.y)<1e-6).toBe(true);
+ await expect(page.locator('#bottomLayouts .rough-cut-outline')).toHaveCount(2);
+ await expect(page.locator('#bottomLayouts .rough-cut-outline').first())
+  .toHaveAttribute('stroke','#b3262c');
+ await expect(page.locator('#bottomCutList')).toContainText('Rough W × D');
+ await expect(page.locator('#bottomCutList')).toContainText('21" × 21"');
+ await expect(page.locator('#bottomLayouts')).toContainText('Rough-cut edge clearance insufficient');
+ const bytes=await page.evaluate(async()=>{
+  const plan=window.BottomSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1')));
+  return Array.from(new Uint8Array(await window.BottomPdf.makePdf(plan).arrayBuffer()));
+ });
+ const pdf=Buffer.from(bytes).toString('latin1');
+ expect(pdf).toContain('0.7 0.12 0.16 RG');
+ expect(pdf).toContain('[4 3] 0 d');
+ expect(pdf).toContain('RED DASH: rough cut at 1/2" outside finished edges');
+ expect(pdf).toContain('(R 21" x 21"');
+});
+
+test('rough margin warns when an outer panel edge lacks clearance',async({page})=>{
+ await page.goto('/');
+ const outcome=await page.evaluate(()=>{
+  const sheet={width:48,length:96,trim:.25};
+  return [
+   window.BottomSolver.roughCutFor({x:.25,y:.25,width:20,length:20,cutWidth:20,cutLength:20},sheet,1),
+   window.BottomSolver.roughCutFor({x:2,y:2,width:20,length:20,cutWidth:20,cutLength:20},sheet,1)
+  ];
+ });
+ expect(outcome[0].fits).toBe(false);
+ expect(outcome[0].clipped.left).toBe(true);
+ expect(outcome[0].clipped.top).toBe(true);
+ expect(outcome[1].fits).toBe(true);
+ expect(outcome[1].bounds).toEqual({x:1.5,y:1.5,width:21,length:21});
+});
