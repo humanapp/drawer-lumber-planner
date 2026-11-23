@@ -236,7 +236,7 @@ test('glue-up strips respect editable 2-inch minimum and the setting survives re
   expect(restricted.unassigned).toHaveLength(2);
   expect(restricted.crosscuts).toBe(0);
   await page.reload();
-  await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('6');
+  await expect(page.getByLabel('Minimum glue-up strip width (in)')).toHaveValue('6"');
 });
 
 test('older saved projects default minimum glue-up strip to 2 inches', async ({ page }) => {
