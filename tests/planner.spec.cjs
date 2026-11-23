@@ -1125,7 +1125,7 @@ test('rough-cut centerlines mark half of simulated wide kerf and list oversize b
  await expect(page.locator('#bottomLayouts .rough-cut-outline').first())
   .toHaveAttribute('stroke','#b3262c');
  await expect(page.locator('#bottomCutList')).toContainText('Rough W × D');
- await expect(page.locator('#bottomCutList')).toContainText('20 1/2" × 21"');
+ await expect(page.locator('#bottomCutList')).toContainText('20-1/2" × 21"');
  await expect(page.locator('#bottomLayouts')).not.toContainText('Rough-cut edge clearance insufficient');
  const bytes=await page.evaluate(async()=>{
   const plan=window.BottomSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1')));
