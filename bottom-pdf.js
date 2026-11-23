@@ -24,8 +24,8 @@ function makePdf(plan){
   for(let i=start;i<end;i++){
    const part=rows[i],y=atY-(i-start)*LEGEND_ROW;
    result+='0.15 0.19 0.23 rg\n'+txt(LEGEND_X,y,10,(i+1)+'. '+part.coordinate,true);
-   result+='0.37 0.4 0.44 rg\n'+txt(LEGEND_X+13,y-11,8,
-    fmt(part.width)+' x '+fmt(part.length)+'  at x '+fmt(part.x)+', y '+fmt(part.y));
+   result+='0.37 0.4 0.44 rg\n'+txt(LEGEND_X+13,y-11,8,fmt(part.width)+' x '+fmt(part.length))+
+    txt(LEGEND_X+126,y-11,7,'x '+fmt(part.x)+' / y '+fmt(part.y));
   }
   return result;
  };
