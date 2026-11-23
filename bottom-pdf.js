@@ -46,7 +46,7 @@ function makePdf(plan){
    ripFirst?'RIP FIRST: full-length strips parallel to grain, then crosscut within each strip.':
     'Alternate guillotine layout; see panel positions.');
   if(plan.kerf>0)out+='0.55 0.1 0.12 rg\n'+txt(LEFT,676,8,
-   'RED DASH: rough cut at '+fmt(plan.kerf/2)+' outside finished edges. R = rough size; * = insufficient edge margin.');
+   'RED DASH: rough cuts '+fmt(plan.kerf/2)+' beyond non-sheet edges. Trim edges are final. R = rough size.');
   out+='0.95 0.96 0.97 rg\n'+rect(left,top-sh,sw,sh,true);
   // Shade the unusable factory-edge perimeter in the physical sheet diagram.
   if(sheet.trim>0){
@@ -85,8 +85,12 @@ function makePdf(plan){
    out+='0.7 0.12 0.16 RG\n0.9 w\n[4 3] 0 d\n';
    for(const part of rows){
     const rough=root.BottomSolver.roughCutFor(part,sheet,plan.kerf),r=rough.bounds;
-    out+=rect(left+r.x*scale,top-(r.y+r.length)*scale,
-     r.width*scale,r.length*scale);
+    const x1=left+r.x*scale,x2=x1+r.width*scale;
+    const y1=top-(r.y+r.length)*scale,y2=y1+r.length*scale;
+    if(!rough.finalEdges.left)out+=line(x1,y1,x1,y2);
+    if(!rough.finalEdges.right)out+=line(x2,y1,x2,y2);
+    if(!rough.finalEdges.top)out+=line(x1,y2,x2,y2);
+    if(!rough.finalEdges.bottom)out+=line(x1,y1,x2,y1);
    }
    out+='[] 0 d\nQ\n';
   }
