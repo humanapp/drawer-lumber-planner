@@ -1,108 +1,123 @@
-/* Printable drawer-bottom sheet cutting diagram and cut list. */
+/* Printable drawer-bottom sheet diagrams with legible panel coordinates. */
 (function(root){
 'use strict';
 const fmt=n=>root.InchMeasurements.format(n);
 const esc=s=>String(s??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7e]/g,'?')
  .replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
 const txt=(x,y,size,s,bold=false)=>'BT /'+(bold?'F2':'F1')+' '+size+' Tf 1 0 0 1 '+x.toFixed(2)+' '+y.toFixed(2)+' Tm ('+esc(s)+') Tj ET\n';
-const rect=(x,y,w,h,fill=false)=>[x,y,w,h].map(n=>n.toFixed(2)).join(' ')+' re '+(fill?'f':'S')+'\n';
+const rect=(x,y,w,h,fill=false)=>[x,y,w,h].map(v=>v.toFixed(2)).join(' ')+' re '+(fill?'f':'S')+'\n';
+const line=(x1,y1,x2,y2)=>[x1,y1,'m',x2,y2,'l S\n'].map(v=>typeof v==='number'?v.toFixed(2):v).join(' ');
+const PAGE_W=612,PAGE_H=792,LEFT=30,CHART_TOP=668,CHART_BOTTOM=83,CHART_MAX_W=302,LEGEND_X=356,LEGEND_ROW=25,LEGEND_ROWS=22;
 function makePdf(plan){
- const pages=[],W=792,H=612,margin=36, bottom=40;
- let stream='',y;
- function page(){
-  if(stream)pages.push(stream);
-  stream='0.13 0.18 0.23 rg\n'+txt(margin,570,18,'DRAWER BOTTOM SHEET CUTTING PLAN',true);
-  stream+='0.4 0.45 0.5 rg\n'+txt(margin,549,9,'Dimensions in inches, rounded to 1/32. Cut widths include no kerf; allow saw kerf between parts.');
-  y=530;
+ const pages=[];
+ const pageHeader=()=>(
+  '0.13 0.18 0.23 rg\n'+txt(LEFT,756,17,'DRAWER BOTTOM SHEET CUTTING PLAN',true)+
+  '0.43 0.46 0.5 rg\n'+txt(LEFT,736,9,'Dimensions rounded to 1/32 inch. Kerf is shown between panels; verify before cutting.')
+ );
+ function title(sheet,continuation=false){
+  return '0.13 0.18 0.23 rg\n'+txt(LEFT,711,13,
+   sheet.label+'  '+fmt(sheet.width)+' x '+fmt(sheet.length)+'  THICKNESS '+fmt(sheet.thickness)+(continuation?' (continued)':''),true);
  }
- page();
- const sheets=(plan?.sheets||[]).filter(s=>s.placements.length);
- if(!sheets.length)stream+=txt(margin,510,12,'No assigned sheet cuts.');
+ const sheets=(plan?.sheets||[]).filter(sheet=>sheet.placements.length);
+ const numberedLegend=(rows,start,end,atY=650)=>{
+  let result='0.13 0.18 0.23 rg\n'+txt(LEGEND_X,675,11,'PANEL KEY',true);
+  for(let i=start;i<end;i++){
+   const part=rows[i],y=atY-(i-start)*LEGEND_ROW;
+   result+='0.15 0.19 0.23 rg\n'+txt(LEGEND_X,y,10,(i+1)+'. '+part.coordinate,true);
+   result+='0.37 0.4 0.44 rg\n'+txt(LEGEND_X+13,y-11,8,
+    fmt(part.width)+' x '+fmt(part.length)+'  at x '+fmt(part.x)+', y '+fmt(part.y));
+  }
+  return result;
+ };
+ if(!sheets.length){
+  pages.push(pageHeader()+'0.13 0.18 0.23 rg\n'+txt(LEFT,695,12,'No assigned sheet cuts.'));
+ }
  for(const sheet of sheets){
-  const rows=sheet.placements;
-  const chartHeight=220,chartWidth=420;
-  if(y<chartHeight+95){page()}
-  stream+='0.13 0.18 0.23 rg\n'+txt(margin,y,12,sheet.label+'  '+fmt(sheet.width)+' x '+fmt(sheet.length)+'  THICKNESS '+fmt(sheet.thickness),true);
-  y-=19;
-  if(plan.cutOrder==='rip-first'){
-   stream+='0.25 0.32 0.3 rg\\n'+txt(margin,y,9,
-    'RIP FIRST: full-length strips parallel to grain, then crosscut within each strip.',true);
-   y-=13;
-  }else{
-   stream+='0.3 0.3 0.3 rg\\n'+txt(margin,y,8,'Alternate guillotine layout; see panel positions.');
-   y-=13;
-  }
-  const scale=Math.min(chartWidth/sheet.width,chartHeight/sheet.length);
-  const sw=sheet.width*scale,sl=sheet.length*scale,x=margin,top=y;
-  stream+='0.62 0.65 0.67 RG\n0.8 w\n'+rect(x,top-sl,sw,sl);
-  for(const [i,part] of rows.entries()){
-   const px=x+part.x*scale,py=top-(part.y+part.cutLength)*scale,
-     pw=part.cutWidth*scale,ph=part.cutLength*scale;
-   stream+=(i%2?'0.87 0.79 0.62 rg\n':'0.79 0.87 0.78 rg\n')+rect(px,py,pw,ph,true);
-   stream+='0.36 0.42 0.47 RG\n0.5 w\n'+rect(px,py,pw,ph);
-   if(pw>=42&&ph>=18)stream+='0.18 0.19 0.18 rg\n'+txt(px+3,py+ph/2,8,part.coordinate,true);
-  }
-  // Faint full-sheet projections of cut boundaries to match the SVG.
-  // These are visual guides; they are not instructions to cut full width.
-  const verticalGuides=new Set(),horizontalGuides=new Set();
-  for(const part of rows){
-   const px=part.x+part.cutWidth,py=part.y+part.cutLength;
-   if(px>1e-6&&px<sheet.width-1e-6)verticalGuides.add(px.toFixed(5));
-   if(py>1e-6&&py<sheet.length-1e-6)horizontalGuides.add(py.toFixed(5));
-  }
-  stream+='0.77 0.77 0.77 RG\\n0.3 w\\n[2 2] 0 d\\n';
-  for(const value of verticalGuides){
-   const xx=x+Number(value)*scale;
-   stream+=xx.toFixed(2)+' '+(top-sl).toFixed(2)+' m '+xx.toFixed(2)+' '+top.toFixed(2)+' l S\\n';
-  }
-  for(const value of horizontalGuides){
-   const yy=top-Number(value)*scale;
-   stream+=x.toFixed(2)+' '+yy.toFixed(2)+' m '+(x+sw).toFixed(2)+' '+yy.toFixed(2)+' l S\\n';
-  }
-  stream+='[] 0 d\\n';
-  y=top-sl-19;
-  if(plan.cutOrder==='rip-first'){
-   for(const strip of sheet.strips){
-    if(y<bottom+14){page();stream+='0.13 0.18 0.23 rg\\n'+txt(margin,y,11,sheet.label+' (continued)',true);y-=18}
-    stream+='0.25 0.32 0.3 rg\\n'+txt(margin+4,y,9,
-     'R'+strip.index+': rip '+fmt(strip.width)+' wide x '+fmt(sheet.length)+' full length; crosscut '+strip.placements.map(p=>fmt(p.cutLength)).join(', '));
-    y-=13;
+  const rows=sheet.placements,scale=Math.min(CHART_MAX_W/sheet.width,
+   (CHART_TOP-CHART_BOTTOM)/sheet.length),sw=sheet.width*scale,sh=sheet.length*scale,
+   left=LEFT,top=CHART_TOP;
+  let out=pageHeader()+title(sheet);
+  const ripFirst=plan.cutOrder==='rip-first';
+  out+='0.35 0.38 0.42 rg\n'+txt(LEFT,688,9,
+   ripFirst?'RIP FIRST: full-length strips parallel to grain, then crosscut within each strip.':
+    'Alternate guillotine layout; see panel positions.');
+  out+='0.95 0.96 0.97 rg\n'+rect(left,top-sh,sw,sh,true);
+  // Draw every panel at full-sheet scale. Use the full coordinate when it fits
+  // legibly and otherwise a short number that refers to the adjacent key.
+  for(const [i,p] of rows.entries()){
+   const px=left+p.x*scale,py=top-(p.y+p.cutLength)*scale,
+    pw=p.cutWidth*scale,ph=p.cutLength*scale;
+   out+=(i%2?'0.88 0.80 0.64 rg\n':'0.76 0.86 0.79 rg\n')+rect(px,py,pw,ph,true);
+   out+='0.36 0.43 0.47 RG\n0.7 w\n'+rect(px,py,pw,ph);
+   const label=p.coordinate,fullSize=10;
+   const canFull=pw>=label.length*fullSize*.61+10&&ph>=22;
+   const marker=String(i+1);
+   if(canFull){
+    out+='0.09 0.13 0.16 rg\n'+txt(px+5,py+ph/2,fullSize,label,true);
+   }else if(pw>=marker.length*7+7&&ph>=12){
+    out+='0.09 0.13 0.16 rg\n'+txt(px+4,py+ph/2,10,marker,true);
    }
-   y-=5;
   }
-  for(const part of rows){
-   if(y<bottom+15){page();stream+='0.13 0.18 0.23 rg\n'+txt(margin,y,11,sheet.label+' (continued)',true);y-=18}
-   stream+='0.2 0.23 0.27 rg\n'+txt(margin+4,y,9,part.coordinate,true)
-     +txt(margin+100,y,9,fmt(part.width)+' x '+fmt(part.length))
-     +txt(margin+255,y,9,part.label.slice(0,30))
-     +txt(margin+485,y,9,'x '+fmt(part.x)+' / y '+fmt(part.y))
-     +txt(margin+615,y,9,part.rotated?'ROTATED':'');
-   y-=15;
+  // Subtle edge-to-edge cut projections; not extra full-sheet saw cuts.
+  const xs=new Set(),ys=new Set();
+  for(const p of rows){
+   const rx=p.x+p.cutWidth,ry=p.y+p.cutLength;
+   if(rx>1e-6&&rx<sheet.width-1e-6)xs.add(rx.toFixed(5));
+   if(ry>1e-6&&ry<sheet.length-1e-6)ys.add(ry.toFixed(5));
   }
-  y-=19;
+  out+='0.76 0.76 0.76 RG\n0.35 w\n[2 2] 0 d\n';
+  for(const v of xs){const x=left+Number(v)*scale;out+=line(x,top-sh,x,top);}
+  for(const v of ys){const y=top-Number(v)*scale;out+=line(left,y,left+sw,y);}
+  out+='[] 0 d\n0.45 0.48 0.5 RG\n0.9 w\n'+rect(left,top-sh,sw,sh);
+  out+=numberedLegend(rows,0,Math.min(LEGEND_ROWS,rows.length));
+  if(ripFirst){
+   const strips=sheet.strips||[];
+   // Compact, cut-order summary below the legend when it fits.
+   let y=102;
+   if(strips.length&&rows.length<=17){
+    out+='0.2 0.27 0.3 rg\n'+txt(LEGEND_X,y,8,'Full-length rips:',true);y-=12;
+    for(const strip of strips.slice(0,5)){
+     out+=txt(LEGEND_X,y,7.5,'R'+strip.index+'  '+fmt(strip.width)+' wide x '+fmt(sheet.length)+' full length');y-=11;
+    }
+   }
+  }
+  pages.push(out);
+  // Keep the diagram large, even when a very crowded sheet requires a
+  // second page for its coordinate legend.
+  for(let start=LEGEND_ROWS;start<rows.length;start+=LEGEND_ROWS){
+   pages.push(pageHeader()+title(sheet,true)+
+    '0.36 0.39 0.43 rg\n'+txt(LEFT,685,10,'PANEL KEY (continued from sheet diagram)')+
+    numberedLegend(rows,start,Math.min(rows.length,start+LEGEND_ROWS)));
+  }
  }
  if(plan?.unassigned?.length){
-  if(y<80)page();
-  stream+='0.55 0.19 0.17 rg\n'+txt(margin,y,12,'UNASSIGNED BOTTOMS: '+plan.unassigned.length,true);y-=18;
-  for(const part of plan.unassigned){
-   if(y<bottom+10)page();
-   stream+=txt(margin,y,9,part.coordinate+'  '+fmt(part.width)+' x '+fmt(part.length)+'  '+fmt(part.thickness)+' thick');y-=13;
+  const parts=plan.unassigned;
+  for(let start=0;start<parts.length;start+=35){
+   let out=pageHeader()+'0.58 0.19 0.16 rg\n'+txt(LEFT,704,13,'UNASSIGNED BOTTOMS: '+parts.length,true);
+   for(let i=start;i<Math.min(start+35,parts.length);i++){
+    const p=parts[i],y=680-(i-start)*17;
+    out+='0.25 0.3 0.35 rg\n'+txt(LEFT,y,9,
+     p.coordinate+'  '+fmt(p.width)+' x '+fmt(p.length)+'  '+fmt(p.thickness)+' thick');
+   }
+   pages.push(out);
   }
  }
- pages.push(stream);
  const objects=[''],add=s=>(objects.push(s),objects.length-1);
  const font=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
  const bold=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
  const catalog=add(''),tree=add(''),pageIds=[],encoder=new TextEncoder();
  for(let i=0;i<pages.length;i++){
-  const content=pages[i]+'0.4 0.4 0.4 rg\n'+txt(margin,22,8,'Drawer bottom plan  -  Page '+(i+1)+' of '+pages.length);
-  const data=add('<< /Length '+encoder.encode(content).length+' >>\nstream\n'+content+'endstream');
-  pageIds.push(add('<< /Type /Page /Parent '+tree+' 0 R /MediaBox [0 0 '+W+' '+H+'] /Resources << /Font << /F1 '+font+' 0 R /F2 '+bold+' 0 R >> >> /Contents '+data+' 0 R >>'));
+  const source=pages[i]+'0.4 0.4 0.4 rg\n'+txt(LEFT,25,8,'Drawer bottom plan  -  Page '+(i+1)+' of '+pages.length);
+  const streamId=add('<< /Length '+encoder.encode(source).length+' >>\nstream\n'+source+'endstream');
+  pageIds.push(add('<< /Type /Page /Parent '+tree+' 0 R /MediaBox [0 0 '+PAGE_W+' '+PAGE_H+'] /Resources << /Font << /F1 '+font+' 0 R /F2 '+bold+' 0 R >> >> /Contents '+streamId+' 0 R >>'));
  }
  objects[catalog]='<< /Type /Catalog /Pages '+tree+' 0 R >>';
  objects[tree]='<< /Type /Pages /Kids ['+pageIds.map(i=>i+' 0 R').join(' ')+'] /Count '+pageIds.length+' >>';
  let output='%PDF-1.4\n',offsets=[0];
- for(let i=1;i<objects.length;i++){offsets[i]=encoder.encode(output).length;output+=i+' 0 obj\n'+objects[i]+'\nendobj\n'}
+ for(let i=1;i<objects.length;i++){
+  offsets[i]=encoder.encode(output).length;
+  output+=i+' 0 obj\n'+objects[i]+'\nendobj\n';
+ }
  const xref=encoder.encode(output).length;
  output+='xref\n0 '+objects.length+'\n0000000000 65535 f \n';
  for(let i=1;i<objects.length;i++)output+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
