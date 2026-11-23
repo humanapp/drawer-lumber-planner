@@ -12,7 +12,7 @@ function makePdf(plan){
  function page(){
   if(stream)pages.push(stream);
   stream='0.13 0.18 0.23 rg\n'+txt(margin,570,18,'DRAWER BOTTOM SHEET CUTTING PLAN',true);
-  stream+='0.4 0.45 0.5 rg\n'+txt(margin,549,9,'Dimensions in inches, rounded to 1/16. Cut widths include no kerf; allow saw kerf between parts.');
+  stream+='0.4 0.45 0.5 rg\n'+txt(margin,549,9,'Dimensions in inches, rounded to 1/32. Cut widths include no kerf; allow saw kerf between parts.');
   y=530;
  }
  page();
