@@ -190,7 +190,7 @@ test('actual board assignments suppress legacy assumed glue seams', async ({ pag
 test('all main sections collapse independently and reset to expanded after reload', async ({ page }) => {
   await page.goto('/');
   const sections=page.locator('main > details.collapsible');
-  await expect(sections).toHaveCount(6);
+  await expect(sections).toHaveCount(7);
   for(const section of await sections.all())await expect(section).toHaveAttribute('open','');
   const inventory=page.locator('main > details.collapsible').filter({has:page.getByRole('heading',{name:'Measured lumber inventory'})});
   await inventory.locator('summary').click();
@@ -789,11 +789,11 @@ test('sheet inventory, settings, and PDF bottom cutting list persist',async({pag
  await page.getByRole('button',{name:'+ Add sheet'}).click();
  await page.getByLabel('Sheet S1 width').fill('48');
  await page.getByLabel('Sheet S1 width').press('Tab');
- await page.getByLabel('Bottom width deduction (in)').fill('0.75');
- await page.getByLabel('Bottom width deduction (in)').press('Tab');
+ await page.getByLabel('Bottom side-to-side deduction (in)').fill('0.75');
+ await page.getByLabel('Bottom side-to-side deduction (in)').press('Tab');
  await page.reload();
  await expect(page.getByLabel('Sheet S1 width')).toHaveValue('48');
- await expect(page.getByLabel('Bottom width deduction (in)')).toHaveValue('0.75');
+ await expect(page.getByLabel('Bottom side-to-side deduction (in)')).toHaveValue('0.75');
  await expect(page.locator('#bottomCutList')).toContainText('19-1/4" × 29-1/2"');
  const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Export bottom PDF'}).click()]);
  expect(download.suggestedFilename()).toBe('drawer-bottom-cutting-plan.pdf');
