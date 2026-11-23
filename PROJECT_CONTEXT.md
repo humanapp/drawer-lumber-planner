@@ -99,3 +99,12 @@ The **Crosscut assignment solver** section provides **Export crosscut PDF**, gen
 
 ## Calculation caution
 The first implementations estimate strip yield per height group and use a simplified average length calculation; they do not optimize crosscuts on finite 8–10 foot purchased boards. Check the per-part extra-length convention carefully before relying on purchasing totals. Consider a unit-tested cut optimizer as a future improvement.
+
+## Drawer-bottom sheet-goods solver (November 2026)
+- Added separate **Drawer bottom sheet cutting solver** alongside hardwood crosscut solver, reusing drawer configurations.
+- **1/4" bottoms for 5" drawers**, **1/2" bottoms for taller conventional drawers**. Vertical pullouts excluded; their bottom dimensions aren't determined by existing inputs.
+- Panel width and depth default to outside drawer width/depth minus **1/2"** respectively. Both deductions editable; fit must be confirmed on prototype.
+- Enter measured sheets (label, count, thickness, width, length). Kerf-aware, guillotine-compatible 2D nesting. Rotation disabled by default to preserve grain, opt-in rotation available. Heuristic, not guaranteed mathematically optimal.
+- Layout diagrams, panel IDs (e.g. A1-BT), cut table, assigned/unassigned counts, PDF and CSV exports.
+- Sheet inventory and settings persisted to local storage and JSON backups. Display inch dimensions use shared nearest-1/16 formatting; internal calculations retain precision.
+- Modules: bottom-solver.js, bottom-ui.js, bottom-pdf.js integrated in index.html. Browser regressions in tests/planner.spec.cjs.
