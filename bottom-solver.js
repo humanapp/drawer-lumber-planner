@@ -47,6 +47,12 @@ function demands(project){
 function sheetsOf(project){
  const sheets=[];
  const trim=n(project.bottomSettings?.factoryEdgeTrim ?? 0);
+ // Every finished edge needs half the modeled cutting corridor, including
+ // the four outside edges. Internal panels already get a full kerf between
+ // their finished boundaries. Thus the available nesting region is inset
+ // by (factory trim + kerf/2) on every side.
+ const kerf=n(project.bottomSettings?.kerf ?? .125);
+ const roughMargin=kerf/2,packingInset=round(trim+roughMargin);
  for(const [i,source] of (project.sheets||[]).entries()){
   // Sheet grain is assumed parallel to its longer dimension. Normalize the
   // diagram so full-length rips always run vertically.
@@ -57,12 +63,15 @@ function sheetsOf(project){
   for(let copy=1;copy<=qty;copy++)sheets.push({
    id:String(source.id||'S'+(i+1))+(qty>1?'-'+copy:''),
    label:String(source.label||source.id||'Sheet '+(i+1))+(qty>1?' #'+copy:''),
-   width,length,thickness,trim,
+   width,length,thickness,trim,roughMargin,packingInset,
    usableWidth:Math.max(0,round(width-2*trim)),
    usableLength:Math.max(0,round(length-2*trim)),
+   packingWidth:Math.max(0,round(width-2*packingInset)),
+   packingLength:Math.max(0,round(length-2*packingInset)),
    placements:[],
-   free:(width>2*trim+EPS&&length>2*trim+EPS)?
-    [{x:trim,y:trim,width:round(width-2*trim),length:round(length-2*trim)}]:[]
+   free:(width>2*packingInset+EPS&&length>2*packingInset+EPS)?
+    [{x:packingInset,y:packingInset,
+     width:round(width-2*packingInset),length:round(length-2*packingInset)}]:[]
   });
  }
  return sheets;
@@ -161,33 +170,33 @@ function ripFirstPlan(project,mode){
    for(const rotated of (allowRotation?[false,true]:[false])){
     const width=rotated?part.length:part.width,
      length=rotated?part.width:part.length;
-    if(length>sheet.usableLength+EPS||width>sheet.usableWidth+EPS)continue;
+    if(length>sheet.packingLength+EPS||width>sheet.packingWidth+EPS)continue;
     // Reuse a full-length strip before ripping another one. Only same-width
     // pieces share a strip, avoiding an unplanned secondary width rip.
     for(const strip of sheet.strips){
      if(Math.abs(strip.width-width)>EPS)continue;
      const start=strip.nextY===0?0:strip.nextY;
-     if(start+length>sheet.trim+sheet.usableLength+EPS)continue;
-     const slack=sheet.trim+sheet.usableLength-(start+length);
+     if(start+length>sheet.packingInset+sheet.packingLength+EPS)continue;
+     const slack=sheet.packingInset+sheet.packingLength-(start+length);
      const score=slack+(rotated?200:0)+si*.001;
      if(!best||score<best.score-EPS)
       best={sheet,strip,x:strip.x,y:start,width,length,rotated,score};
     }
     const previous=sheet.strips[sheet.strips.length-1];
-    const x=previous?round(previous.x+previous.width+kerf):sheet.trim;
-    if(x+width>sheet.trim+sheet.usableWidth+EPS)continue;
+    const x=previous?round(previous.x+previous.width+kerf):sheet.packingInset;
+    if(x+width>sheet.packingInset+sheet.packingWidth+EPS)continue;
     // Prefer already used sheets over opening a new sheet, and prefer
     // tighter lane packing when two equivalent new strips are possible.
     const score=100000+(sheet.placements.length?0:100000)+
-     (sheet.trim+sheet.usableWidth-x-width)*10+(rotated?200:0)+si*.001;
+     (sheet.packingInset+sheet.packingWidth-x-width)*10+(rotated?200:0)+si*.001;
     if(!best||score<best.score-EPS)
-     best={sheet,strip:null,x,y:sheet.trim,width,length,rotated,score};
+     best={sheet,strip:null,x,y:sheet.packingInset,width,length,rotated,score};
    }
   }
   if(!best){unassigned.push(part);continue}
   const sheet=best.sheet;
   const strip=best.strip||{index:sheet.strips.length+1,x:best.x,
-   width:best.width,length:sheet.usableLength,nextY:sheet.trim,placements:[]};
+   width:best.width,length:sheet.packingLength,nextY:sheet.packingInset,placements:[]};
   if(!best.strip)sheet.strips.push(strip);
   const placement={...part,x:round(best.x),y:round(best.y),
    cutWidth:best.width,cutLength:best.length,rotated:best.rotated,
@@ -195,25 +204,27 @@ function ripFirstPlan(project,mode){
   strip.placements.push(placement);
   sheet.placements.push(placement);
   const end=round(best.y+best.length);
-  strip.nextY=end+kerf<=sheet.trim+sheet.usableLength+EPS?
-   round(end+kerf):sheet.trim+sheet.usableLength;
+  strip.nextY=end+kerf<=sheet.packingInset+sheet.packingLength+EPS?
+   round(end+kerf):sheet.packingInset+sheet.packingLength;
  }
  for(const sheet of sheets){
   if(!sheet.strips.length){
-   sheet.free=sheet.usableWidth>EPS&&sheet.usableLength>EPS?
-    [{x:sheet.trim,y:sheet.trim,width:sheet.usableWidth,length:sheet.usableLength}]:[];
+   sheet.free=sheet.packingWidth>EPS&&sheet.packingLength>EPS?
+    [{x:sheet.packingInset,y:sheet.packingInset,
+     width:sheet.packingWidth,length:sheet.packingLength}]:[];
    continue;
   }
   for(const strip of sheet.strips){
    const last=strip.placements[strip.placements.length-1];
    const y=round(last.y+last.cutLength);
-   if(sheet.trim+sheet.usableLength-y>EPS)sheet.free.push({
-    x:strip.x,y,width:strip.width,length:round(sheet.trim+sheet.usableLength-y)});
+   if(sheet.packingInset+sheet.packingLength-y>EPS)sheet.free.push({
+    x:strip.x,y,width:strip.width,length:round(sheet.packingInset+sheet.packingLength-y)});
   }
   const last=sheet.strips[sheet.strips.length-1];
   const x=round(last.x+last.width);
-  if(sheet.trim+sheet.usableWidth-x>EPS)sheet.free.push({
-   x,y:sheet.trim,width:round(sheet.trim+sheet.usableWidth-x),length:sheet.usableLength});
+  if(sheet.packingInset+sheet.packingWidth-x>EPS)sheet.free.push({
+   x,y:sheet.packingInset,width:round(sheet.packingInset+sheet.packingWidth-x),
+   length:sheet.packingLength});
  }
  const placed=sheets.reduce((sum,s)=>sum+s.placements.length,0),
   usedSheets=sheets.filter(s=>s.placements.length).length,
