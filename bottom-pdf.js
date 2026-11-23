@@ -16,7 +16,8 @@ function makePdf(plan){
  );
  function title(sheet,continuation=false){
   return '0.13 0.18 0.23 rg\n'+txt(LEFT,711,13,
-   sheet.label+'  '+fmt(sheet.width)+' x '+fmt(sheet.length)+'  THICKNESS '+fmt(sheet.thickness)+(continuation?' (continued)':''),true);
+   sheet.label+'  '+fmt(sheet.width)+' x '+fmt(sheet.length)+'  THICKNESS '+fmt(sheet.thickness)+
+   (sheet.trim?'  EDGE TRIM '+fmt(sheet.trim):'')+(continuation?' (continued)':''),true);
  }
  const sheets=(plan?.sheets||[]).filter(sheet=>sheet.placements.length);
  const numberedLegend=(rows,start,end,atY=650)=>{
@@ -42,6 +43,20 @@ function makePdf(plan){
    ripFirst?'RIP FIRST: full-length strips parallel to grain, then crosscut within each strip.':
     'Alternate guillotine layout; see panel positions.');
   out+='0.95 0.96 0.97 rg\n'+rect(left,top-sh,sw,sh,true);
+  // Shade the unusable factory-edge perimeter in the physical sheet diagram.
+  if(sheet.trim>0){
+   const trim=Math.min(sheet.trim,sheet.width/2,sheet.length/2)*scale;
+   out+='0.74 0.74 0.74 rg\n';
+   for(const [rx,ry,rw,rh] of [
+    [left,top-trim,sw,trim],
+    [left,top-sh,sw,trim],
+    [left,top-sh+trim,trim,Math.max(0,sh-2*trim)],
+    [left+sw-trim,top-sh+trim,trim,Math.max(0,sh-2*trim)]
+   ])if(rw>0&&rh>0)out+=rect(rx,ry,rw,rh,true);
+   if(sheet.usableWidth>0&&sheet.usableLength>0)
+    out+='0.48 0.49 0.5 RG\n0.55 w\n[2 2] 0 d\n'+
+     rect(left+trim,top-sh+trim,sw-2*trim,sh-2*trim)+'[] 0 d\n';
+  }
   // Draw every panel at full-sheet scale. Use the full coordinate when it fits
   // legibly and otherwise a short number that refers to the adjacent key.
   for(const [i,p] of rows.entries()){
