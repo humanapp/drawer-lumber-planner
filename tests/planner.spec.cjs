@@ -1023,8 +1023,8 @@ test('bottom PDF uses enlarged portrait diagram and keys every panel coordinate'
  expect(pages).toBe(2); // diagram + overflow key
  for(let i=1;i<=27;i++)expect(pdf).toContain('('+(i)+'. P'+i+'-BT)');
  expect(pdf).toContain('(PANEL KEY (continued from sheet diagram))');
- // 48x96 panel plotted at roughly 285x570 points, rather than 110x220.
- expect(pdf).toContain('285.00 570.00 re');
+ // 48x96 panel plotted at roughly 293x585 points, rather than 110x220.
+ expect(pdf).toContain('292.50 585.00 re');
  expect(pdf).toContain('(1. P1-BT)');
  expect(pdf).toContain('(27. P27-BT)');
 });
