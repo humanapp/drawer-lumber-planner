@@ -35,7 +35,10 @@ function demands(project){
 function sheetsOf(project){
  const sheets=[];
  for(const [i,source] of (project.sheets||[]).entries()){
-  const width=n(source.width),length=n(source.length),thickness=n(source.thickness);
+  // Sheet grain is assumed parallel to its longer dimension. Normalize the
+  // diagram so full-length rips always run vertically.
+  const width=Math.min(n(source.width),n(source.length)),
+   length=Math.max(n(source.width),n(source.length)),thickness=n(source.thickness);
   if(width<=EPS||length<=EPS||thickness<=EPS)continue;
   const qty=Math.min(100,Math.floor(n(source.qty??1)));
   for(let copy=1;copy<=qty;copy++)sheets.push({
@@ -113,11 +116,104 @@ function plan(project,mode){
  return {sheets,parts,placed,unassigned,usedSheets,wastedArea,usedArea,kerf,allowRotation,
    skippedVertical:(project.groups||[]).flatMap(g=>g.items||[]).filter(i=>i.vertical).length};
 }
+// Rip-first layout: every strip runs the full length of the sheet, parallel
+// to grain. Crosscuts within each strip follow, with a kerf between panels.
+// Keep this separate from the generic guillotine heuristic so we can compare
+// complete plans without giving up otherwise assignable parts.
+function ripFirstPlan(project,mode){
+ const sheets=sheetsOf(project),parts=demands(project),
+  settings=project.bottomSettings||{},
+  kerf=n(settings.kerf===undefined?.125:settings.kerf),
+  allowRotation=settings.allowRotation===true;
+ for(const sheet of sheets){sheet.strips=[];sheet.free=[]}
+ const ordered=[...parts],strategy=mode%4;
+ ordered.sort((a,b)=>{
+  if(a.thickness!==b.thickness)return a.thickness-b.thickness;
+  if(strategy===0)return b.width-a.width||b.length-a.length||a.id.localeCompare(b.id);
+  if(strategy===1)return b.length-a.length||b.width-a.width||a.id.localeCompare(b.id);
+  if(strategy===2)return b.width*b.length-a.width*a.length||a.id.localeCompare(b.id);
+  return a.width-b.width||b.length-a.length||a.id.localeCompare(b.id);
+ });
+ const unassigned=[];
+ for(const part of ordered){
+  let best=null;
+  for(let si=0;si<sheets.length;si++){
+   const sheet=sheets[si];
+   if(Math.abs(sheet.thickness-part.thickness)>EPS)continue;
+   for(const rotated of (allowRotation?[false,true]:[false])){
+    const width=rotated?part.length:part.width,
+     length=rotated?part.width:part.length;
+    if(length>sheet.length+EPS)continue;
+    // Reuse a full-length strip before ripping another one. Only same-width
+    // pieces share a strip, avoiding an unplanned secondary width rip.
+    for(const strip of sheet.strips){
+     if(Math.abs(strip.width-width)>EPS)continue;
+     const start=strip.nextY===0?0:strip.nextY;
+     if(start+length>sheet.length+EPS)continue;
+     const slack=sheet.length-(start+length);
+     const score=slack+(rotated?200:0)+si*.001;
+     if(!best||score<best.score-EPS)
+      best={sheet,strip,x:strip.x,y:start,width,length,rotated,score};
+    }
+    const previous=sheet.strips[sheet.strips.length-1];
+    const x=previous?round(previous.x+previous.width+kerf):0;
+    if(x+width>sheet.width+EPS)continue;
+    // Prefer already used sheets over opening a new sheet, and prefer
+    // tighter lane packing when two equivalent new strips are possible.
+    const score=100000+(sheet.placements.length?0:100000)+
+     (sheet.width-x-width)*10+(rotated?200:0)+si*.001;
+    if(!best||score<best.score-EPS)
+     best={sheet,strip:null,x,y:0,width,length,rotated,score};
+   }
+  }
+  if(!best){unassigned.push(part);continue}
+  const sheet=best.sheet;
+  const strip=best.strip||{index:sheet.strips.length+1,x:best.x,
+   width:best.width,length:sheet.length,nextY:0,placements:[]};
+  if(!best.strip)sheet.strips.push(strip);
+  const placement={...part,x:round(best.x),y:round(best.y),
+   cutWidth:best.width,cutLength:best.length,rotated:best.rotated,
+   strip:strip.index,axis:1};
+  strip.placements.push(placement);
+  sheet.placements.push(placement);
+  const end=round(best.y+best.length);
+  strip.nextY=end+kerf<=sheet.length+EPS?round(end+kerf):sheet.length;
+ }
+ for(const sheet of sheets){
+  if(!sheet.strips.length){sheet.free=[{x:0,y:0,width:sheet.width,length:sheet.length}];continue}
+  for(const strip of sheet.strips){
+   const last=strip.placements[strip.placements.length-1];
+   const y=round(last.y+last.cutLength);
+   if(sheet.length-y>EPS)sheet.free.push({x:strip.x,y,width:strip.width,length:round(sheet.length-y)});
+  }
+  const last=sheet.strips[sheet.strips.length-1];
+  const x=round(last.x+last.width);
+  if(sheet.width-x>EPS)sheet.free.push({x,y:0,width:round(sheet.width-x),length:sheet.length});
+ }
+ const placed=sheets.reduce((sum,s)=>sum+s.placements.length,0),
+  usedSheets=sheets.filter(s=>s.placements.length).length,
+  wastedArea=sheets.reduce((sum,s)=>sum+(s.placements.length?
+   s.width*s.length-s.placements.reduce((a,p)=>a+p.width*p.length,0):0),0),
+  usedArea=sheets.reduce((sum,s)=>sum+s.placements.reduce((a,p)=>a+p.width*p.length,0),0);
+ return {sheets,parts,placed,unassigned,usedSheets,wastedArea,usedArea,
+  kerf,allowRotation,cutOrder:'rip-first',
+  skippedVertical:(project.groups||[]).flatMap(g=>g.items||[]).filter(i=>i.vertical).length};
+}
 function solve(project){
  let best=null;
  const better=(a,b)=>!b||a.placed>b.placed||
   (a.placed===b.placed&&(a.usedSheets<b.usedSheets||
-   (a.usedSheets===b.usedSheets&&(a.wastedArea<b.wastedArea-EPS))));
+   (a.usedSheets===b.usedSheets&&(
+    (a.cutOrder==='rip-first'&&b.cutOrder!=='rip-first')||
+    ((a.cutOrder==='rip-first')===(b.cutOrder==='rip-first')&&
+     a.wastedArea<b.wastedArea-EPS)))));
+ // Prefer full-length grain-parallel ripping when it assigns the same
+ // number of bottoms using the same number of sheets. The generic guillotine
+ // search remains a fallback if it uses fewer sheets or assigns more panels.
+ for(let mode=0;mode<8;mode++){
+  const candidate=ripFirstPlan(project,mode);
+  if(better(candidate,best))best=candidate;
+ }
  for(let mode=0;mode<12;mode++){
   const candidate=plan(project,mode);
   if(better(candidate,best))best=candidate;
