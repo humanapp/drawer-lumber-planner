@@ -744,19 +744,19 @@ test('bottom solver derives conventional drawer sizes and matches sheet thicknes
   {id:3,height:7,items:[{id:4,code:'B',label:'Deep',qty:1,width:20,depth:30}]},
   {id:5,height:11,items:[{id:6,code:'C',label:'Upright',qty:1,width:20,depth:10,vertical:true}]}
  ];
- project.bottomSettings={widthDeduction:.5,depthDeduction:.5,kerf:.125,allowRotation:false};
+ project.bottomSettings={wallThickness:.5,grooveDepth:.25,kerf:.125,allowRotation:false};
  project.sheets=[{id:'S1',label:'Quarter',width:48,length:96,thickness:.25,qty:1}];
  await page.addInitScript(({key,project})=>localStorage.setItem(key,JSON.stringify(project)),{key,project});
  await page.goto('/');
  const plan=await page.evaluate(()=>window.BottomSolver.solve(JSON.parse(localStorage.getItem('drawer-lumber-planner-v1'))));
  expect(plan.parts.map(p=>[p.coordinate,p.width,p.length,p.thickness])).toEqual([
-  ['A1-BT',19.5,29.5,.25],['A2-BT',19.5,29.5,.25],['B1-BT',19.5,29.5,.5]
+  ['A1-BT',19.5,29.75,.25],['A2-BT',19.5,29.75,.25],['B1-BT',19.5,29.75,.5],['C1-BT',10.5,9.5,.5]
  ]);
  expect(plan.placed).toBe(2);
- expect(plan.unassigned.map(p=>p.coordinate)).toEqual(['B1-BT']);
- expect(plan.skippedVertical).toBe(1);
+ expect(plan.unassigned.map(p=>p.coordinate)).toEqual(['B1-BT','C1-BT']);
+ expect(plan.skippedVertical).toBe(0);
  await expect(page.getByRole('heading',{name:'Drawer bottom sheet cutting solver'})).toBeVisible();
- await expect(page.locator('#bottomSummary')).toContainText('2 / 3');
+ await expect(page.locator('#bottomSummary')).toContainText('2 / 4');
  await expect(page.locator('#bottomLayouts svg')).toHaveCount(1);
  await expect(page.locator('#bottomCutList')).toContainText('19-1/2" × 29-1/2"');
 });
@@ -766,7 +766,7 @@ test('bottom nesting respects kerf and keeps placed rectangles disjoint',async({
  const outcome=await page.evaluate(()=>{
   const project={
    groups:[{id:1,height:5,items:[{id:2,code:'A',label:'Bottoms',qty:4,width:20.5,depth:20.5}]}],
-   bottomSettings:{widthDeduction:.5,depthDeduction:.5,kerf:.25,allowRotation:false},
+   bottomSettings:{wallThickness:.5,grooveDepth:.25,kerf:.25,allowRotation:false},
    sheets:[{id:'S1',width:41,length:41,thickness:.25,qty:1}]
   };
   return window.BottomSolver.solve(project);
@@ -789,11 +789,11 @@ test('sheet inventory, settings, and PDF bottom cutting list persist',async({pag
  await page.getByRole('button',{name:'+ Add sheet'}).click();
  await page.getByLabel('Sheet S1 width').fill('48');
  await page.getByLabel('Sheet S1 width').press('Tab');
- await page.getByLabel('Bottom side-to-side deduction (in)').fill('0.75');
- await page.getByLabel('Bottom side-to-side deduction (in)').press('Tab');
+ await page.getByLabel('Drawer wall thickness (in)').fill('0.625');
+ await page.getByLabel('Drawer wall thickness (in)').press('Tab');
  await page.reload();
  await expect(page.getByLabel('Sheet S1 width')).toHaveValue('48');
- await expect(page.getByLabel('Bottom side-to-side deduction (in)')).toHaveValue('0.75');
+ await expect(page.getByLabel('Drawer wall thickness (in)')).toHaveValue('0.625');
  await expect(page.locator('#bottomCutList')).toContainText('19-1/4" × 29-1/2"');
  const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Export bottom PDF'}).click()]);
  expect(download.suggestedFilename()).toBe('drawer-bottom-cutting-plan.pdf');
@@ -812,7 +812,7 @@ test('bottom solver prioritizes full-length grain-parallel rips, then crosscuts 
  ];
  // Sheet dimensions are intentionally reversed: grain follows the longer edge.
  project.sheets=[{id:'S1',label:'Maple quarter',width:96,length:48,thickness:.25,qty:1}];
- project.bottomSettings={widthDeduction:.5,depthDeduction:.5,kerf:.125,allowRotation:false};
+ project.bottomSettings={wallThickness:.5,grooveDepth:.25,kerf:.125,allowRotation:false};
  await page.addInitScript(({key,project})=>{
   if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
  },{key,project});
@@ -830,7 +830,7 @@ test('bottom solver prioritizes full-length grain-parallel rips, then crosscuts 
   expect(strip.placements).toHaveLength(2);
   expect(strip.placements[0].x).toBe(strip.placements[1].x);
   expect(strip.placements[0].y).toBe(0);
-  expect(strip.placements[1].y).toBe(29.625);
+  expect(strip.placements[1].y).toBe(29.875);
  }
  await expect(page.locator('#bottomLayouts')).toContainText('RIP FIRST');
  await expect(page.locator('#bottomLayouts')).toContainText('full-length strips');
@@ -839,4 +839,43 @@ test('bottom solver prioritizes full-length grain-parallel rips, then crosscuts 
  const pdf=(await fs.readFile(await download.path())).toString('latin1');
  expect(pdf).toContain('(RIP FIRST: full-length strips parallel to grain, then crosscut within each strip.)');
  expect(pdf).toContain('full length');
+});
+
+test('bottom joinery uses side/front grooves with rear overlap, and four grooves for verticals',async({page})=>{
+ await page.goto('/');
+ const project={
+  groups:[
+   {id:1,height:5,items:[{id:2,code:'A',qty:1,width:20,depth:24}]},
+   {id:3,height:12,items:[{id:4,code:'B',qty:1,width:28,depth:22,vertical:true}]}
+  ],
+  bottomSettings:{wallThickness:.625,grooveDepth:.25},
+  sheets:[]
+ };
+ const parts=await page.evaluate(p=>window.BottomSolver.demands(p),project);
+ expect(parts.map(({coordinate,width,length,thickness,construction,vertical})=>
+  ({coordinate,width,length,thickness,construction,vertical}))).toEqual([
+  {coordinate:'A1-BT',width:19.25,length:23.625,thickness:.25,construction:'three-groove-back-overlap',vertical:false},
+  {coordinate:'B1-BT',width:11.25,length:21.25,thickness:.5,construction:'four-groove',vertical:true}
+ ]);
+});
+
+test('sheet layout projects horizontal and vertical cut guides across entire sheet',async({page})=>{
+ const project=structuredClone(sampleProject);
+ project.groups=[{id:1,height:5,items:[{id:2,code:'A',qty:4,width:20.5,depth:20.5}]}];
+ project.bottomSettings={wallThickness:.5,grooveDepth:.25,kerf:.125,allowRotation:false};
+ project.sheets=[{id:'S1',width:48,length:96,thickness:.25,qty:1}];
+ await page.addInitScript(({key,project})=>{
+  if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(project));
+ },{key,project});
+ await page.goto('/');
+ const guides=page.locator('#bottomLayouts .sheet-cut-guides line');
+ await expect(guides.first()).toBeVisible();
+ const lines=await guides.evaluateAll(nodes=>nodes.map(n=>({
+  x1:+n.getAttribute('x1'),x2:+n.getAttribute('x2'),
+  y1:+n.getAttribute('y1'),y2:+n.getAttribute('y2'),
+  opacity:n.parentNode.getAttribute('opacity')
+ })));
+ expect(lines.some(l=>l.y1===2&&l.y2===98)).toBe(true);
+ expect(lines.some(l=>l.x1===2&&l.x2===50)).toBe(true);
+ expect(lines.every(l=>l.opacity==='.42')).toBe(true);
 });
